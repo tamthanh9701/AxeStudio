@@ -44,13 +44,17 @@ impl MockProvider {
                 Capability::Understand,
                 Capability::HotSwapModel,
                 Capability::CancelRunningJob,
+                Capability::SplitPlanRender,
             ],
         }
     }
 }
 
 /// Ngủ có thể bị huỷ giữa chừng.
-async fn interruptible_sleep(d: Duration, cancel: &tokio_util::sync::CancellationToken) -> Result<()> {
+async fn interruptible_sleep(
+    d: Duration,
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<()> {
     tokio::select! {
         _ = tokio::time::sleep(d) => Ok(()),
         _ = cancel.cancelled() => Err(ProviderError::Cancelled),
@@ -170,6 +174,12 @@ impl RenderProvider for MockProvider {
             },
             seed_used: seed,
             duration_ms,
+            // Echo codes lại — provider thật (py) trả codes trong result json.
+            audio_codes: if input.plan.audio_codes.is_empty() {
+                None
+            } else {
+                Some(input.plan.audio_codes.clone())
+            },
         })
     }
 

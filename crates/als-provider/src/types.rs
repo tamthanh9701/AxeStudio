@@ -41,6 +41,10 @@ pub enum Capability {
     HotSwapModel,
     CancelRunningJob,
     LoraTraining,
+    /// Provider tách được pha LM (plan) và pha DiT (render) thành 2 lời gọi.
+    /// cpp có (`/lm` + `/synth`); py KHÔNG — release_task là single-shot,
+    /// dù nó chấp nhận `audio_code_string` để bỏ qua LM ở lần sau.
+    SplitPlanRender,
 }
 
 impl Capability {
@@ -100,11 +104,23 @@ pub struct PlanInput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlanOutput {
     /// FSQ tokens — `audio_code_string` của ACE-Step.
+    /// Rỗng với provider non-split (orchestrator truyền plan rỗng vào render()).
     pub audio_codes: String,
     /// Lyrics sau khi LM xử lý (LM tự sinh nếu input rỗng).
     pub lyrics: Option<String>,
     /// bpm/key/duration mà LM suy ra — giữ nguyên dạng JSON.
     pub metas: serde_json::Value,
+}
+
+impl PlanOutput {
+    /// Plan rỗng cho provider non-split: render() tự lo cả hai pha.
+    pub fn opaque() -> Self {
+        Self {
+            audio_codes: String::new(),
+            lyrics: None,
+            metas: serde_json::Value::Null,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -133,6 +149,10 @@ pub struct RenderOutput {
     /// Seed thực tế đã dùng (engine random khi recipe không chỉ định).
     pub seed_used: u64,
     pub duration_ms: u64,
+    /// audio_codes engine đã dùng/sinh ra — Some khi provider trả được
+    /// (py trả trong result json; cpp đã có từ plan()). Orchestrator dùng để
+    /// backfill plan_cache, để re-roll seed lần sau bỏ qua được pha LM.
+    pub audio_codes: Option<String>,
 }
 
 #[derive(Debug, Clone)]

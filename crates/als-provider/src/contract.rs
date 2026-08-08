@@ -13,7 +13,7 @@
 //! ```
 
 use crate::provider::{JobCtx, RenderProvider};
-use crate::types::{PlanInput, Progress, RenderInput, UnderstandInput};
+use crate::types::{Capability, PlanInput, PlanOutput, Progress, RenderInput, UnderstandInput};
 use als_core::{GenerationRecipe, JobId, ModelTier, SamplingParams, TaskType};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -67,7 +67,10 @@ pub async fn check_id_and_caps(p: &dyn RenderProvider) {
 }
 
 pub async fn check_health(p: &dyn RenderProvider) {
-    let h = p.health().await.expect("health() phải trả lời được, kể cả khi chưa ready");
+    let h = p
+        .health()
+        .await
+        .expect("health() phải trả lời được, kể cả khi chưa ready");
     if h.ready {
         // ready mà không có model nào là config sai.
         let models = p.models().await.expect("models() lỗi khi health.ready");
@@ -75,17 +78,33 @@ pub async fn check_health(p: &dyn RenderProvider) {
     }
 }
 
-/// plan() → render() roundtrip: audio trả về phải là WAV RIFF, duration > 0.
+/// plan() → render() roundtrip.
+///
+/// Provider có SplitPlanRender (cpp): plan() phải trả audio_codes không rỗng,
+/// render() nhận codes đó.
+/// Provider non-split (py): bỏ qua plan(), render() với PlanOutput::opaque()
+/// phải tự chạy cả hai pha và trả WAV hợp lệ.
 pub async fn check_plan_render_roundtrip(p: &dyn RenderProvider) {
     let recipe = test_recipe();
     let model = first_model(p).await;
 
-    let (cx, _rx) = ctx(CancellationToken::new());
-    let plan = p
-        .plan(PlanInput { recipe: recipe.clone(), model: model.clone() }, cx)
-        .await
-        .expect("plan() thất bại với recipe tối thiểu");
-    assert!(!plan.audio_codes.is_empty(), "plan() trả audio_codes rỗng");
+    let plan = if p.capabilities().contains(&Capability::SplitPlanRender) {
+        let (cx, _rx) = ctx(CancellationToken::new());
+        let plan = p
+            .plan(
+                PlanInput {
+                    recipe: recipe.clone(),
+                    model: model.clone(),
+                },
+                cx,
+            )
+            .await
+            .expect("plan() thất bại với recipe tối thiểu");
+        assert!(!plan.audio_codes.is_empty(), "plan() trả audio_codes rỗng");
+        plan
+    } else {
+        PlanOutput::opaque()
+    };
 
     let (cx, _rx) = ctx(CancellationToken::new());
     let out = p
@@ -104,16 +123,20 @@ pub async fn check_plan_render_roundtrip(p: &dyn RenderProvider) {
 pub async fn check_cancel_before_dispatch(p: &dyn RenderProvider) {
     let recipe = test_recipe();
     let model = first_model(p).await;
-    let plan = crate::types::PlanOutput {
-        audio_codes: "CONTRACT-PLACEHOLDER".into(),
-        lyrics: None,
-        metas: serde_json::json!({}),
-    };
 
     let cancel = CancellationToken::new();
     cancel.cancel();
     let (cx, _rx) = ctx(cancel);
-    let result = p.render(RenderInput { recipe, plan, model }, cx).await;
+    let result = p
+        .render(
+            RenderInput {
+                recipe,
+                plan: PlanOutput::opaque(),
+                model,
+            },
+            cx,
+        )
+        .await;
     match result {
         Err(crate::error::ProviderError::Cancelled) => {}
         other => panic!("render() với token đã huỷ phải Err(Cancelled), nhận: {other:?}"),
@@ -130,21 +153,22 @@ pub async fn check_cancel_unknown_job(p: &dyn RenderProvider) {
 
 /// understand(): chỉ kiểm khi provider tuyên bố có capability Understand.
 pub async fn check_understand_if_supported(p: &dyn RenderProvider) {
-    use crate::types::Capability;
     if !p.capabilities().contains(&Capability::Understand) {
         return;
     }
-    // Render 1s audio thật để làm input.
+    // Render 10s audio thật để làm input.
     let recipe = test_recipe();
     let model = first_model(p).await;
     let (cx, _rx) = ctx(CancellationToken::new());
-    let plan = p
-        .plan(PlanInput { recipe: recipe.clone(), model: model.clone() }, cx)
-        .await
-        .expect("plan cho understand");
-    let (cx, _rx) = ctx(CancellationToken::new());
     let out = p
-        .render(RenderInput { recipe, plan, model }, cx)
+        .render(
+            RenderInput {
+                recipe,
+                plan: PlanOutput::opaque(),
+                model,
+            },
+            cx,
+        )
         .await
         .expect("render cho understand");
 
@@ -154,7 +178,13 @@ pub async fn check_understand_if_supported(p: &dyn RenderProvider) {
 
     let (cx, _rx) = ctx(CancellationToken::new());
     let analysis = p
-        .understand(UnderstandInput { audio_path: path, question: None }, cx)
+        .understand(
+            UnderstandInput {
+                audio_path: path,
+                question: None,
+            },
+            cx,
+        )
         .await
         .expect("understand() thất bại dù tuyên bố capability");
     assert!(!analysis.caption.is_empty(), "understand() trả caption rỗng");
