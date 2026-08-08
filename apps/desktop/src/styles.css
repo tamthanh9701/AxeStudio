@@ -44,7 +44,7 @@ body {
 }
 
 .topbar input {
-  width: 260px;
+  width: 220px;
 }
 
 .logo {
@@ -216,9 +216,28 @@ button.danger {
   padding: 24px;
 }
 
+.timeline-toolbar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
 .ruler {
+  position: relative;
   height: 28px;
   border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.ruler .tick {
+  position: absolute;
+  top: 6px;
+  font-size: 10px;
+  color: var(--text-dim);
+  border-left: 1px solid var(--border);
+  padding-left: 4px;
 }
 
 .playhead {
@@ -255,10 +274,9 @@ button.danger {
   bottom: 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  text-align: left;
-  padding: 4px 8px;
+  padding: 0;
   overflow: hidden;
-  white-space: nowrap;
+  text-align: left;
 }
 
 .clip-generated {
@@ -271,6 +289,68 @@ button.danger {
 
 .clip-selected {
   outline: 2px solid var(--accent);
+}
+
+.clip-wave {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.clip-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+/* Jobs */
+.jobs {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.job-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.job-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.job-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+
+.job-stage {
+  font-size: 11px;
+  min-width: 88px;
+  text-align: right;
+}
+
+/* Export */
+.export-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.export-bar input {
+  flex: 1;
 }
 
 /* Take rack */

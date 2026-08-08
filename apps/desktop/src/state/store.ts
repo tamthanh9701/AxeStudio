@@ -28,6 +28,8 @@ interface StudioState {
   playing: boolean
   selectedClipId: string | null
   takes: Record<string, TakeInfo[]>
+  /** Zoom timeline — pixel trên mỗi ms. 0.05 = 50px/giây. */
+  pxPerMs: number
 
   setSnapshot: (s: ProjectSnapshot | null) => void
   setDirty: (d: boolean) => void
@@ -36,6 +38,7 @@ interface StudioState {
   setPlayhead: (ms: number, playing: boolean) => void
   selectClip: (id: string | null) => void
   setTakes: (clipId: string, takes: TakeInfo[]) => void
+  setPxPerMs: (v: number) => void
 }
 
 export const useStudio = create<StudioState>()((set) => ({
@@ -47,6 +50,7 @@ export const useStudio = create<StudioState>()((set) => ({
   playing: false,
   selectedClipId: null,
   takes: {},
+  pxPerMs: 0.05,
 
   setSnapshot: (snapshot) => set({ snapshot }),
   setDirty: (dirty) => set({ dirty }),
@@ -59,4 +63,5 @@ export const useStudio = create<StudioState>()((set) => ({
   setPlayhead: (playheadMs, playing) => set({ playheadMs, playing }),
   selectClip: (selectedClipId) => set({ selectedClipId }),
   setTakes: (clipId, takes) => set((s) => ({ takes: { ...s.takes, [clipId]: takes } })),
+  setPxPerMs: (pxPerMs) => set({ pxPerMs }),
 }))

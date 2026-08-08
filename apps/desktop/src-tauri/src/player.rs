@@ -68,11 +68,12 @@ fn consolidate_track(track: &Track, db: &Db, store: &AssetStore) -> BufferSource
         for f in 0..want {
             let si = (offset + f) * ch;
             let di = (start + f) * 2;
-            let (Some(&l), Some(&r)) = (
-                buf.samples.get(si).unwrap_or(&0.0),
-                buf.samples.get(si + ch.min(1)).unwrap_or(&0.0), // mono → R = L
-            ) else {
-                continue;
+            let l = buf.samples.get(si).copied().unwrap_or(0.0);
+            // Stereo: R ở si+1. Mono: R = L (trước đây đọc nhầm sang frame kế).
+            let r = if ch >= 2 {
+                buf.samples.get(si + 1).copied().unwrap_or(0.0)
+            } else {
+                l
             };
             let (Some(dl), Some(dr)) = (data.get_mut(di), data.get_mut(di + 1)) else {
                 continue;
@@ -85,7 +86,7 @@ fn consolidate_track(track: &Track, db: &Db, store: &AssetStore) -> BufferSource
 }
 
 /// Đọc arrangement hiện tại → sources mới → REBUILD engine. Gọi sau
-/// project_open/create, take_promote, take:ready.
+/// project_open/create, take_promote, take:ready, edit.
 pub async fn refresh(state: &State<'_, AppState>) -> Result<(), IpcError> {
     let (tracks, layout) = {
         let guard = state.project.lock().await;
@@ -173,7 +174,7 @@ pub fn bounce(
     let mut mixer = Mixer::new();
     let mut sources: Vec<Option<Box<dyn AudioSource>>> = Vec::with_capacity(tracks.len());
     for track in tracks {
-        sources.push(Some(Box::new(consolidate_track(track, &db, &store))));
+        sources.push(Some(Box::new(consolidate_track(track, &db, store))));
         let idx = mixer.add_track().expect("tối đa 32 track");
         let st = &mut mixer.tracks[idx];
         st.set_gain(db_to_linear(track.gain_db));

@@ -45,6 +45,31 @@ const TASKS: { value: TaskType; label: string }[] = [
   { value: "complete", label: "Complete" },
 ]
 
+function isActive(state: string): boolean {
+  return state !== "done" && state !== "failed" && state !== "cancelled"
+}
+
+function JobList() {
+  const jobs = useStudio((s) => s.jobs)
+  const active = Object.entries(jobs).filter(([, j]) => isActive(j.state))
+  if (active.length === 0) return null
+  return (
+    <div className="jobs">
+      {active.map(([id, j]) => (
+        <div key={id} className="job-item">
+          <div className="job-bar">
+            <div className="job-bar-fill" style={{ width: `${j.percent}%` }} />
+          </div>
+          <span className="dim job-stage">
+            {j.stage} · {j.percent}%
+          </span>
+          <button onClick={() => void ipc.jobCancel(id).catch(() => {})}>Huỷ</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function GeneratePanel() {
   const [recipe, setRecipe] = useState<GenerationRecipe>(defaultRecipe)
   const [busy, setBusy] = useState(false)
@@ -139,10 +164,7 @@ export function GeneratePanel() {
       <div className="row">
         <label>
           Task
-          <select
-            value={recipe.task}
-            onChange={(e) => patch({ task: e.target.value as TaskType })}
-          >
+          <select value={recipe.task} onChange={(e) => patch({ task: e.target.value as TaskType })}>
             {TASKS.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
@@ -192,9 +214,7 @@ export function GeneratePanel() {
             max={300}
             value={recipe.bpm ?? ""}
             placeholder="tự động"
-            onChange={(e) =>
-              patch({ bpm: e.target.value === "" ? null : Number(e.target.value) })
-            }
+            onChange={(e) => patch({ bpm: e.target.value === "" ? null : Number(e.target.value) })}
           />
         </label>
       </div>
@@ -238,6 +258,7 @@ export function GeneratePanel() {
       <button className="primary" disabled={busy} onClick={() => void submit()}>
         {busy ? "Đang xếp job…" : "Generate"}
       </button>
+      <JobList />
       {message && <p className="hint">{message}</p>}
     </div>
   )

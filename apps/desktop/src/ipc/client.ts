@@ -11,6 +11,7 @@ import type {
   EditCommand,
   EditOutcome,
   EngineStatus,
+  ExportSpec,
   GenerationRecipe,
   PeakView,
   ProjectSnapshot,
@@ -62,6 +63,9 @@ export const ipc = {
   engineStatus: () => invoke<EngineStatus>("engine_status"),
   engineSwitchBackend: (providerId: string) =>
     invoke<void>("engine_switch_backend", { providerId }),
+
+  // export — v1 đồng bộ, trả đường dẫn file ra (contract ipc.md §Export)
+  exportRender: (spec: ExportSpec) => invoke<string>("export_render", { spec }),
 }
 
 /**

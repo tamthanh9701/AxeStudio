@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react"
 import { explainError, ipc, SAMPLE_RATE } from "./ipc/client"
-import {
-  onJobProgress,
-  onJobState,
-  onProjectDirty,
-  onTakeReady,
-} from "./ipc/events"
+import { onJobProgress, onJobState, onProjectDirty, onTakeReady } from "./ipc/events"
 import { useStudio } from "./state/store"
 import { GeneratePanel } from "./features/generate/GeneratePanel"
 import { TimelineView } from "./features/timeline/TimelineView"
@@ -19,6 +14,7 @@ export default function App() {
   const playheadMs = useStudio((s) => s.playheadMs)
   const [path, setPath] = useState("D:\\AxeStudio\\demo.aiproj")
   const [name, setName] = useState("Demo")
+  const [exportPath, setExportPath] = useState("D:\\AxeStudio\\export\\master.wav")
   const [notice, setNotice] = useState<string | null>(null)
 
   // Event subscriptions — mount một lần.
@@ -89,6 +85,30 @@ export default function App() {
     }
   }
 
+  const switchBackend = async (providerId: string) => {
+    try {
+      await ipc.engineSwitchBackend(providerId)
+      const s = await ipc.engineStatus()
+      useStudio.getState().setEngine(s)
+    } catch (e) {
+      setNotice(explainError(e))
+    }
+  }
+
+  const doExport = async () => {
+    try {
+      const out = await ipc.exportRender({
+        format: "wav24",
+        range: { type: "project" },
+        out_path: exportPath,
+        include_metadata: true,
+      })
+      setNotice(`Đã xuất: ${out}`)
+    } catch (e) {
+      setNotice(explainError(e))
+    }
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -98,6 +118,15 @@ export default function App() {
         <button onClick={() => void open()}>Mở</button>
         <button onClick={() => void create()}>Tạo mới</button>
         <span className="spacer" />
+        <select
+          value={engine?.backend ?? "mock"}
+          onChange={(e) => void switchBackend(e.target.value)}
+          title="Backend engine"
+        >
+          <option value="mock">mock (dev)</option>
+          <option value="cpp">acestep.cpp</option>
+          <option value="py">acestep-api</option>
+        </select>
         <button onClick={() => void ipc.transportPlay().catch(() => {})}>▶</button>
         <button onClick={() => void ipc.transportPause().catch(() => {})}>⏸</button>
         <span className="dim">
@@ -118,6 +147,16 @@ export default function App() {
             </div>
           )}
           <TimelineView />
+          {snapshot && (
+            <div className="export-bar">
+              <input
+                value={exportPath}
+                onChange={(e) => setExportPath(e.target.value)}
+                placeholder="đường dẫn file WAV xuất ra"
+              />
+              <button onClick={() => void doExport()}>Export WAV</button>
+            </div>
+          )}
         </section>
         <aside className="inspector">
           <GeneratePanel />
