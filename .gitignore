@@ -4,9 +4,11 @@ target/
 
 # Node
 node_modules/
-dist/
 .vite/
 *.tsbuildinfo
+# dist: bỏ qua build output, NGOẠI TRỪ placeholder cho generate_context!
+**/dist/*
+!**/dist/index.html
 
 # Tauri
 apps/desktop/src-tauri/gen/
