@@ -7,20 +7,23 @@
 use als_audio::Engine;
 use als_core::UndoStack;
 use als_orchestrator::OrchestratorHandle;
-use als_project::Project;
+use als_project::{Project, ProjectLayout};
 use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
 use tauri::AppHandle;
 use tokio::sync::Mutex;
+
+/// Alias để player/bounce nói về layout mà không import lẻ.
+pub type Layout = ProjectLayout;
 
 pub struct AppState {
     app: OnceLock<AppHandle>,
     pub project: Mutex<Option<Project>>,
     pub orchestrator: Mutex<Option<OrchestratorHandle>>,
     pub undo: Mutex<UndoStack>,
-    /// Engine tạo lazy ở lần play đầu tiên. Nếu cpal::Stream trên một nền tảng
-    /// nào đó hoá ra !Send, chuyển engine sang thread riêng + channel — pattern
-    /// đó là của Sprint 2, không nhét vào đây sớm.
+    /// Engine tạo lazy ở lần play đầu tiên và REBUILD khi sources đổi
+    /// (player::refresh). Nếu cpal::Stream trên một nền tảng nào đó hoá ra
+    /// !Send, chuyển engine sang thread riêng + channel — pattern của S2.
     pub engine: Mutex<Option<Engine>>,
     /// Command-level playing flag (transport_position trả về cho UI poll).
     pub playing: AtomicBool,

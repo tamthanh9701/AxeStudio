@@ -65,7 +65,7 @@ Contract gốc nói "playhead đọc từ `AtomicU64` chia sẻ". Điều đó �
 
 | Command | Input | Output |
 | --- | --- | --- |
-| `export_render` | `ExportSpec` | `JobId` — **Sprint 6**, scaffold trả `CAPABILITY_NOT_SUPPORTED` |
+| `export_render` | `ExportSpec` | `string` (out_path) | v1: **đồng bộ**, chỉ WAV 24-bit, sidecar `.meta.json` khi `include_metadata`. MP3/FLAC qua FFmpeg sidecar ở Sprint 6; khi đó chuyển thành job queue như plan gốc |
 
 ## Events (Rust → UI)
 
@@ -77,6 +77,12 @@ Contract gốc nói "playhead đọc từ `AtomicU64` chia sẻ". Điều đó �
 | `engine:status` | `EngineStatus` | Khi thay đổi, tối đa 1 lần/giây |
 | `peaks:ready` | `{ asset_id }` | Peaks sinh xong |
 | `project:dirty` | `{ dirty }` | Undo stack thay đổi |
+
+## Playback wiring (v1)
+
+- Mỗi track được **consolidate** thành một buffer timeline-absolute lúc: mở project, `project_apply_edit`, undo/redo, `take_promote`, event `take:ready` (`src-tauri/player.rs`).
+- Engine rebuild mỗi lần refresh (click ~50ms, chấp nhận được ở v1). S2 thay bằng streaming per-clip + live swap (arc-swap).
+- Consolidation bị chặn ở 5 phút/track để không bùng RAM với arrangement dài.
 
 ## Quy ước lỗi
 

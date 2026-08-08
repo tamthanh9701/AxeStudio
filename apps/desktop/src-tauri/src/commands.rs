@@ -2,6 +2,7 @@
 //! Mọi lỗi trả về IpcError (code enum đóng); UI map code → tiếng Việt.
 
 use crate::assets_io;
+use crate::player;
 use crate::state::AppState;
 use als_assets::{AssetStore, PeakMipmap};
 use als_core::{
@@ -16,7 +17,7 @@ use serde::Serialize;
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 pub type CmdResult<T> = Result<T, IpcError>;
 
@@ -67,7 +68,7 @@ fn default_providers(assets_root: &Path) -> Vec<Arc<dyn als_provider::RenderProv
 }
 
 /// Mở session cho project vừa create/open: orchestrator (connection db thứ
-/// hai) + forward event về UI + reset undo stack.
+/// hai) + forward event về UI + reset undo stack + nạp playback sources.
 async fn bootstrap_session(state: &State<'_, AppState>, project: Project) -> CmdResult<()> {
     let orch_db = als_project::Db::open(&project.layout.db_path())?;
     let assets = AssetStore::new(project.layout.assets_dir())
@@ -85,6 +86,9 @@ async fn bootstrap_session(state: &State<'_, AppState>, project: Project) -> Cmd
     *state.orchestrator.lock().await = Some(handle);
     *state.undo.lock().await = UndoStack::new();
     *state.project.lock().await = Some(project);
+    // Nạp audio của project vào engine — lỗi ở đây KHÔNG chặn mở project
+    // (máy không có thiết bị audio vẫn phải dùng được phần còn lại).
+    let _ = player::refresh(state).await;
     Ok(())
 }
 
@@ -140,6 +144,9 @@ fn forward_events(app: tauri::AppHandle, handle: OrchestratorHandle) {
                             "cached": cached,
                         }),
                     );
+                    // Take mới → playback phải nạp lại để Play nghe được ngay.
+                    let st = app.state::<AppState>();
+                    let _ = player::refresh(&st).await;
                 }
                 OrchEvent::PeaksReady { asset_id } => {
                     let _ = app.emit(
@@ -233,7 +240,10 @@ pub async fn project_apply_edit(
     state: State<'_, AppState>,
     cmd: EditCommand,
 ) -> CmdResult<EditOutcome> {
-    apply_edit_inner(&state, cmd).await
+    let out = apply_edit_inner(&state, cmd).await?;
+    // Edit ảnh hưởng arrangement (move/trim/split/remove/take) → playback nạp lại.
+    let _ = player::refresh(&state).await;
+    Ok(out)
 }
 
 #[tauri::command]
@@ -252,13 +262,16 @@ pub async fn project_undo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> 
     let _ = state
         .handle()
         .emit("project:dirty", serde_json::json!({ "dirty": dirty }));
+    if label.is_some() {
+        let _ = player::refresh(&state).await;
+    }
     Ok(UndoOutcome { label, snapshot })
 }
 
 #[tauri::command]
 pub async fn project_redo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> {
     let mut project_guard = state.project.lock().await;
-    let project = guard_as_mut(&mut project_guard)?;
+    let project = project_guard.as_mut().ok_or_else(no_project)?;
     let mut undo = state.undo.lock().await;
     let label = undo.redo(&mut project.manifest.arrangement);
     if label.is_some() {
@@ -268,11 +281,10 @@ pub async fn project_redo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> 
     let snapshot = label.as_ref().map(|_| project.snapshot(dirty));
     drop(undo);
     drop(project_guard);
+    if label.is_some() {
+        let _ = player::refresh(&state).await;
+    }
     Ok(UndoOutcome { label, snapshot })
-}
-
-fn guard_as_mut<'a>(g: &'a mut Option<Project>) -> CmdResult<&'a mut Project> {
-    g.as_mut().ok_or_else(no_project)
 }
 
 // ---------- asset ----------
@@ -372,14 +384,16 @@ pub async fn take_promote(
     clip_id: String,
     take_id: String,
 ) -> CmdResult<EditOutcome> {
-    apply_edit_inner(
+    let out = apply_edit_inner(
         &state,
         EditCommand::SetActiveTake {
             clip_id: ClipId::from(clip_id),
             take_id: TakeId::from(take_id),
         },
     )
-    .await
+    .await?;
+    let _ = player::refresh(&state).await;
+    Ok(out)
 }
 
 #[tauri::command]
@@ -506,13 +520,17 @@ pub async fn engine_switch_backend(
 // ---------- export ----------
 
 #[tauri::command]
-pub async fn export_render(
-    _state: State<'_, AppState>,
-    _spec: ExportSpec,
-) -> CmdResult<String> {
-    // Trung thực thay vì stub giả: offline bounce thuộc Sprint 6 (WS-G/S6).
-    Err(IpcError::new(
-        ErrorCode::CapabilityNotSupported,
-        "export_render dự kiến Sprint 6 — chưa có trong bản này",
-    ))
+pub async fn export_render(state: State<'_, AppState>, spec: ExportSpec) -> CmdResult<String> {
+    let (tracks, layout) = {
+        let guard = state.project.lock().await;
+        let p = guard.as_ref().ok_or_else(no_project)?;
+        (p.manifest.arrangement.tracks.clone(), p.layout.clone())
+    };
+    let spec2 = spec.clone();
+    // Bounce nặng CPU/IO — không giữ lock, không chặn runtime.
+    tokio::task::spawn_blocking(move || {
+        player::bounce(&layout, &tracks, &spec2, env!("CARGO_PKG_VERSION"))
+    })
+    .await
+    .map_err(|e| IpcError::new(ErrorCode::Internal, format!("export task: {e}")))?
 }

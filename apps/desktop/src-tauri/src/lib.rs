@@ -4,6 +4,7 @@
 
 mod assets_io;
 mod commands;
+mod player;
 mod state;
 
 pub use state::AppState;

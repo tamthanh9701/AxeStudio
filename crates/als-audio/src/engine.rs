@@ -1,5 +1,9 @@
 //! Engine: cpal output stream (WASAPI shared @48kHz), callback drain command
 //! rồi render mixer. Đây là nơi DUY NHẤT gọi hệ điều hành về audio.
+//!
+//! Đồng bộ source: sources ở v1 là buffer CONSOLIDATED timeline-absolute
+//! (xem src-tauri/player.rs), nên Seek/Stop/loop-wrap phải seek cả sources —
+//! nếu không transport nhảy mà audio vẫn chạy chỗ cũ.
 
 use crate::command::Command;
 use crate::meter::Meters;
@@ -89,7 +93,6 @@ impl Engine {
         let meters = Meters::new();
         let ph = playhead.clone();
         let mt = meters.clone();
-        let sample_rate = builder.config.sample_rate;
 
         let mut mixer = Mixer::new();
         let mut sources = builder.sources;
@@ -112,6 +115,21 @@ impl Engine {
                     while let Ok(cmd) = rx.pop() {
                         transport.apply(&cmd);
                         mixer.apply(&cmd);
+                        // Đồng bộ sources theo transport. Buffer consolidated là
+                        // timeline-absolute → seek thẳng theo frame tuyệt đối.
+                        match cmd {
+                            Command::Seek(f) => {
+                                for s in sources.iter_mut().flatten() {
+                                    s.seek_frames(f);
+                                }
+                            }
+                            Command::Stop => {
+                                for s in sources.iter_mut().flatten() {
+                                    s.seek_frames(0);
+                                }
+                            }
+                            _ => {}
+                        }
                     }
 
                     // 2. Render.
@@ -123,12 +141,19 @@ impl Engine {
                         }
                     }
 
-                    // 3. Cập nhật atomics về phía UI.
+                    // 3. Cập nhật atomics về phía UI + xử lý loop wrap.
                     mt.update(out);
                     let frames = (out.len() / 2) as u64;
+                    let before = transport.position_frames;
                     transport.advance(frames);
-                    ph.store_frames(transport.position_frames);
-                    let _ = sample_rate;
+                    let after = transport.position_frames;
+                    if after < before {
+                        // Vừa wrap loop → sources phải quay về đầu loop.
+                        for s in sources.iter_mut().flatten() {
+                            s.seek_frames(after);
+                        }
+                    }
+                    ph.store_frames(after);
 
                     #[cfg(debug_assertions)]
                     crate::rt_guard::exit_rt_context();
@@ -156,6 +181,12 @@ impl Engine {
         // Queue đầy → bỏ lệnh. 256 slot là rất lớn so với tốc độ bấm của người;
         // nếu đầy thì đó là bug flood phía caller, không retry vòng ở đây.
         let _ = self.command_tx.push(cmd);
+    }
+
+    /// Gửi command tự do (gain/pan/mute/solo...). Dùng khi rebuild engine xong
+    /// cần đẩy lại toàn bộ tham số track từ arrangement.
+    pub fn send_command(&mut self, cmd: Command) {
+        self.send(cmd);
     }
 
     pub fn play(&mut self) {
