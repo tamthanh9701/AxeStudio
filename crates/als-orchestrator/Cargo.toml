@@ -1,0 +1,22 @@
+[package]
+name = "als-orchestrator"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+als-core.workspace = true
+als-project.workspace = true
+als-assets.workspace = true
+als-media.workspace = true
+als-provider.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

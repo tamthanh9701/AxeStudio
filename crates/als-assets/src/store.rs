@@ -18,6 +18,8 @@ pub enum StoreError {
     Io(#[from] std::io::Error),
     #[error("asset id không hợp lệ: {0}")]
     BadId(String),
+    #[error("rel_path không hợp lệ (path traversal?): {0}")]
+    BadRelPath(String),
 }
 
 pub struct AssetStore {
@@ -49,9 +51,25 @@ impl AssetStore {
     pub fn put(&self, bytes: &[u8], ext: &str) -> Result<(AssetId, String), StoreError> {
         let id = AssetId::from_content_hash(&blake3::hash(bytes));
         let rel = Self::rel_path(&id, ext)?;
-        let abs = self.abs_path(&rel);
+        self.put_named(&rel, bytes)?;
+        Ok((id, rel))
+    }
+
+    /// Ghi tại một rel_path CỐ ĐỊNH — cho artifact derive (peaks, thumbnail)
+    /// vốn định vị theo asset gốc, không hash nội dung chính nó.
+    /// Ví dụ: peaks của asset `<hex>` nằm tại `<ab>/<cd>/<hex>.alspeak`.
+    pub fn put_named(&self, rel: &str, bytes: &[u8]) -> Result<(), StoreError> {
+        // Chặn path traversal: rel chỉ được chứa [0-9a-f/] và một dấu chấm.
+        let ok = rel.bytes().all(|b| {
+            b.is_ascii_hexdigit() || b == b'/' || b == b'.'
+        }) && rel.matches('.').count() == 1
+            && !rel.contains("..");
+        if !ok {
+            return Err(StoreError::BadRelPath(rel.to_owned()));
+        }
+        let abs = self.abs_path(rel);
         if abs.exists() {
-            return Ok((id, rel));
+            return Ok(());
         }
         if let Some(dir) = abs.parent() {
             std::fs::create_dir_all(dir)?;
@@ -60,7 +78,7 @@ impl AssetStore {
         let tmp = abs.with_extension("part");
         std::fs::write(&tmp, bytes)?;
         std::fs::rename(&tmp, &abs)?;
-        Ok((id, rel))
+        Ok(())
     }
 
     pub fn get(&self, rel: &str) -> Result<Vec<u8>, StoreError> {
@@ -123,6 +141,18 @@ mod tests {
     fn rejects_bad_id() {
         assert!(AssetStore::rel_path(&AssetId::from("zzz"), "wav").is_err());
         assert!(AssetStore::rel_path(&AssetId::from("short"), "wav").is_err());
+    }
+
+    #[test]
+    fn put_named_blocks_traversal() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AssetStore::new(dir.path()).unwrap();
+        assert!(store.put_named("../../evil.wav", b"x").is_err());
+        assert!(store.put_named("noextension", b"x").is_err());
+        let audio_id = AssetId::from_content_hash(&blake3::hash(b"audio"));
+        let rel = AssetStore::rel_path(&audio_id, "alspeak").unwrap();
+        store.put_named(&rel, b"peaks-bytes").unwrap();
+        assert_eq!(store.get(&rel).unwrap(), b"peaks-bytes");
     }
 
     fn walkdir_count(root: &Path) -> usize {
