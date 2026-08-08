@@ -2,7 +2,7 @@
 
 Đây là contract giữa `apps/desktop` (React) và `src-tauri` (Rust). Mọi thay đổi ở đây đi kèm PR riêng chỉ chứa thay đổi contract + ADR nếu cần.
 
-Kiểu dữ liệu tương ứng được định nghĩa tại `crates/als-core` và sinh sang TS ở `packages/bindings`. Tên field trong JSON dùng `snake_case`.
+Kiểu dữ liệu tương ứng được định nghĩa tại `crates/als-core` và sinh sang TS ở `packages/bindings`. Tên field trong JSON dùng `snake_case`; tên tham số command phía JS dùng camelCase (Tauri tự chuyển).
 
 ## Commands
 
@@ -13,15 +13,15 @@ Kiểu dữ liệu tương ứng được định nghĩa tại `crates/als-core`
 | `project_create` | `{ path, name }` | `ProjectSnapshot` | Tạo `.aiproj` mới, fail nếu path đã tồn tại |
 | `project_open` | `{ path }` | `ProjectSnapshot` | Chạy migration nếu schema cũ hơn; từ chối nếu mới hơn app |
 | `project_save_as` | `{ path }` | `ProjectSnapshot` | Copy project sang vị trí mới, chuyển active project |
-| `project_apply_edit` | `EditCommand` | `EditResult` | Đẩy vào undo stack; emit `project:dirty` |
-| `project_undo` / `project_redo` | — | `{ label?: string }` | label rỗng khi stack hết |
+| `project_apply_edit` | `EditCommand` | `EditOutcome { edit, snapshot }` | Snapshot MỚI trả kèm — UI không bao giờ lệch state. Đẩy vào undo stack; emit `project:dirty` |
+| `project_undo` / `project_redo` | — | `{ label, snapshot }` | label rỗng khi stack hết |
 
 ### Asset
 
 | Command | Input | Output | Ghi chú |
 | --- | --- | --- | --- |
-| `asset_import` | `{ paths: string[] }` | `AssetId[]` | Decode + normalize 48kHz f32; peaks sinh async → event `peaks:ready` |
-| `asset_peaks` | `{ asset_id, zoom_level }` | `{ spp, pairs }` | zoom_level ∈ 0..3 tương ứng 256/1024/4096/16384 spp. MVP trả JSON; nhị phân hoá ở Phase 2 nếu profiler nói cần |
+| `asset_import` | `{ paths: string[] }` | `AssetId[]` | Decode + normalize 48kHz f32; peaks sinh trong cùng lượt → event `peaks:ready` |
+| `asset_peaks` | `{ asset_id, zoom_level }` | `PeakView { spp, pairs }` | zoom_level ∈ 0..3 tương ứng 256/1024/4096/16384 spp. MVP trả JSON; nhị phân hoá ở Phase 2 nếu profiler nói cần |
 | `asset_delete` | `{ asset_id }` | `()` | Chỉ xoá khi không còn take/clip tham chiếu (`ASSET_IN_USE`) |
 
 ### Generation
@@ -31,7 +31,7 @@ Kiểu dữ liệu tương ứng được định nghĩa tại `crates/als-core`
 | `generate_submit` | `{ clip_id, recipe, priority? }` | `JobId` | Vào queue, trả ngay; không chờ kết quả |
 | `job_cancel` | `{ job_id }` | `Cancelled` \| `TooLate` | `TooLate` khi job đã dispatch — UI phải nói rõ |
 | `take_list` | `{ clip_id }` | `TakeInfo[]` | Mới nhất trước |
-| `take_promote` | `{ clip_id, take_id }` | `EditResult` | Đổi take active của clip (qua undo stack) |
+| `take_promote` | `{ clip_id, take_id }` | `EditOutcome` | Đổi take active của clip (qua undo stack) |
 | `take_star` | `{ take_id, starred }` | `()` | |
 | `take_delete` | `{ take_id }` | `()` | Asset giữ lại nếu take khác tham chiếu |
 
