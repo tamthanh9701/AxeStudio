@@ -1,0 +1,9 @@
+# als-audio chạy trên realtime thread — mọi thao tác có thể block đều là lỗi.
+# Danh sách này áp dụng cho cả workspace để không ai vô tình lén vào hot path.
+disallowed-methods = [
+  { path = "std::thread::sleep", reason = "Dùng tokio::time::sleep; cấm tuyệt đối trong audio callback" },
+]
+
+disallowed-types = [
+  { path = "std::sync::Mutex", reason = "Cấm trong als-audio. Crate khác dùng parking_lot hoặc tokio::sync" },
+]

@@ -1,0 +1,38 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Tauri
+apps/desktop/src-tauri/gen/
+
+# Model weights & vendored builds (KHÔNG commit)
+models/
+vendor/acestep-cpp/build*/
+*.gguf
+*.safetensors
+*.ckpt
+*.pt
+
+# Test / bench artifacts
+bench-out/
+tmp/
+*.actual.wav
+perf-report.json
+
+# Local env
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+
+# OS
+Thumbs.db
+.DS_Store

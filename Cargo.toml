@@ -1,0 +1,80 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/als-core",
+  "crates/als-audio",
+  "crates/als-project",
+  "crates/als-assets",
+  "crates/als-media",
+  "crates/als-provider",
+  "crates/als-provider-cpp",
+  "crates/als-provider-py",
+  "crates/als-orchestrator",
+  "apps/desktop/src-tauri",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+authors = ["AxeStudio"]
+publish = false
+
+# MAJOR tăng khi đổi project schema. Xem docs/adr/ADR-004-versioning.md
+
+[workspace.dependencies]
+# --- crate nội bộ ---
+als-core = { path = "crates/als-core" }
+als-audio = { path = "crates/als-audio" }
+als-project = { path = "crates/als-project" }
+als-assets = { path = "crates/als-assets" }
+als-media = { path = "crates/als-media" }
+als-provider = { path = "crates/als-provider" }
+als-provider-cpp = { path = "crates/als-provider-cpp" }
+als-provider-py = { path = "crates/als-provider-py" }
+als-orchestrator = { path = "crates/als-orchestrator" }
+
+# --- nền tảng ---
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+unicode-normalization = "0.1"
+uuid = { version = "1", features = ["v4", "serde"] }
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process", "signal"] }
+tokio-util = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# --- lưu trữ ---
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# --- audio ---
+cpal = "0.15"
+rtrb = "0.3"
+symphonia = { version = "0.5", features = ["wav", "flac", "mp3", "isomp4", "aac"] }
+rubato = "0.15"
+ebur128 = "0.1"
+hound = "3"
+
+# --- mạng ---
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls", "multipart"] }
+
+# --- test ---
+proptest = "1"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "debuginfo"
+
+# Build dev của als-audio phải đủ nhanh để không xrun khi debug.
+[profile.dev.package.als-audio]
+opt-level = 2
+[profile.dev.package.symphonia]
+opt-level = 2
+[profile.dev.package.rubato]
+opt-level = 2
