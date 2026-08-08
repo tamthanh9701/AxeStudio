@@ -18,4 +18,5 @@ mod payload;
 mod provider;
 
 pub use client::AcestepApiClient;
+pub use payload::{build_release_payload, model_id_for_tier, AssetResolver};
 pub use provider::PyProvider;

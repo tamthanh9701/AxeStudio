@@ -52,7 +52,7 @@ pub struct PeakView {
 
 fn default_providers(assets_root: &Path) -> Vec<Arc<dyn als_provider::RenderProvider>> {
     let root = assets_root.to_path_buf();
-    let resolver: Arc<als_provider_py::AssetResolverFor> = Arc::new(move |id: &AssetId| {
+    let resolver: Arc<als_provider_py::AssetResolver> = Arc::new(move |id: &AssetId| {
         AssetStore::rel_path(id, "wav").ok().map(|rel| root.join(rel))
     });
     vec![
@@ -258,7 +258,7 @@ pub async fn project_undo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> 
 #[tauri::command]
 pub async fn project_redo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> {
     let mut project_guard = state.project.lock().await;
-    let project = project_guard.as_mut().ok_or_else(no_project)?;
+    let project = guard_as_mut(&mut project_guard)?;
     let mut undo = state.undo.lock().await;
     let label = undo.redo(&mut project.manifest.arrangement);
     if label.is_some() {
@@ -269,6 +269,10 @@ pub async fn project_redo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> 
     drop(undo);
     drop(project_guard);
     Ok(UndoOutcome { label, snapshot })
+}
+
+fn guard_as_mut<'a>(g: &'a mut Option<Project>) -> CmdResult<&'a mut Project> {
+    g.as_mut().ok_or_else(no_project)
 }
 
 // ---------- asset ----------
