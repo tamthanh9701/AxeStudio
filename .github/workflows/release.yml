@@ -1,0 +1,48 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri build
+
+      # Ký số tất cả exe con + installer. Secrets:
+      #   WINDOWS_CERTIFICATE_BASE64 — file .pfx encode base64
+      #   WINDOWS_CERTIFICATE_PASSWORD
+      - name: Decode signing certificate
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String("${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}"))
+
+      - name: Sign binaries
+        shell: pwsh
+        run: |
+          $cert = "$env:RUNNER_TEMP\cert.pfx"
+          $files = Get-ChildItem -Recurse apps/desktop/src-tauri/target/release -Include *.exe,*.msi
+          foreach ($f in $files) {
+            & signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $cert /p "${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}" $f.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Sign failed: $($f.FullName)" }
+          }
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Recurse apps/desktop/src-tauri/target/release/bundle -Include *.msi | Select-Object -First 1
+          gh release create ${{ github.ref_name }} $msi.FullName --title "AxeStudio ${{ github.ref_name }}" --notes-file docs/CHANGELOG.md --verify-tag
