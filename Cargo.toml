@@ -47,6 +47,11 @@ tokio-util = "0.7"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# --- bindings TS (1 nguồn sự thật cho kiểu dữ liệu) ---
+specta = { version = "2", features = ["derive"] }
+tauri = "2"
+tauri-specta = { version = "2", features = ["derive", "typescript"] }
+
 # --- lưu trữ ---
 rusqlite = { version = "0.32", features = ["bundled"] }
 
@@ -71,7 +76,7 @@ codegen-units = 1
 panic = "abort"
 strip = "debuginfo"
 
-# Build dev của als-audio phải đủ nhanh để không xrun khi debug.
+# Build dev của đường audio phải đủ nhanh để không xrun khi debug.
 [profile.dev.package.als-audio]
 opt-level = 2
 [profile.dev.package.symphonia]
