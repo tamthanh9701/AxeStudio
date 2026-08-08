@@ -1,0 +1,16 @@
+[package]
+name = "als-audio"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish = false
+
+# als-audio KHÔNG được phụ thuộc crate nội bộ nào (AGENTS.md §2).
+# Lý do: cắt mọi đường để allocation/serialization lọt vào audio callback.
+[dependencies]
+cpal.workspace = true
+rtrb.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# Không dùng tempfile: test audio phải chạy được hoàn toàn trong RAM.
