@@ -9,6 +9,7 @@
 
 pub mod canonicalize;
 pub mod document;
+pub mod edit;
 pub mod error;
 pub mod hash;
 pub mod id;
@@ -17,18 +18,17 @@ pub mod recipe;
 
 pub use canonicalize::{canonicalize, normalize_block, normalize_line, CanonicalizeError};
 pub use document::{
-    Arrangement, Clip, ClipSource, EditCommand, EditResult, GenerationInfo, ProjectSnapshot, Track,
-    TrackKind, PROJECT_SCHEMA_VERSION,
+    Arrangement, Clip, ClipSource, EditCommand, EditResult, GenerationInfo, ProjectSnapshot,
+    TakeInfo, Track, TrackKind, PROJECT_SCHEMA_VERSION,
 };
+pub use edit::UndoStack;
 pub use error::{ErrorCode, IpcError};
 pub use hash::{
     plan_hash, render_hash, render_hash_with_version, HashError, PlanHash, RenderHash,
     PIPELINE_VERSION,
 };
 pub use id::{AssetId, ClipId, JobId, ProjectId, ProviderId, TakeId, TrackId};
-pub use job::{
-    priority, EngineStatus, ExportFormat, ExportRange, ExportSpec, JobKind, JobState,
-};
+pub use job::{priority, EngineStatus, ExportFormat, ExportRange, ExportSpec, JobKind, JobState};
 pub use recipe::{
     GenerationRecipe, InferMethod, ModelTier, ProviderOverrides, SamplingParams, TaskType,
 };

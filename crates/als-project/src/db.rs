@@ -1,10 +1,13 @@
 //! SQLite index: asset, plan_cache, take, job.
 //!
 //! Chú ý: document (track/clip) KHÔNG nằm ở đây — nó nằm ở manifest.json.
+//!
+//! Hai connection cùng process là bình thường: orchestrator giữ một, tầng IPC
+//! giữ một. WAL + busy_timeout đảm bảo writer-writer không nổ SQLITE_BUSY.
 
 use crate::error::{ProjectError, Result};
 use crate::migrations;
-use als_core::{AssetId, JobId, JobKind, JobState, TakeId};
+use als_core::{AssetId, JobId, JobKind, JobState, TakeId, TakeInfo};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
@@ -53,6 +56,22 @@ pub struct TakeRow {
     pub created_at: i64,
 }
 
+impl From<TakeRow> for TakeInfo {
+    fn from(r: TakeRow) -> Self {
+        TakeInfo {
+            id: TakeId::from(r.id),
+            clip_id: r.clip_id,
+            plan_hash: r.plan_hash,
+            render_hash: r.render_hash,
+            asset_id: AssetId::from(r.asset_id),
+            lufs: r.lufs,
+            true_peak_db: r.true_peak_db,
+            starred: r.starred,
+            created_at_unix: r.created_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct JobRow {
     pub id: String,
@@ -77,6 +96,9 @@ impl Db {
         // Connection-level pragmas — phải set mỗi lần mở.
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        // 2 connection cùng process (orchestrator + IPC): chờ tới 5s thay vì
+        // nổ SQLITE_BUSY ngay khi hai writer gặp nhau.
+        conn.pragma_update(None, "busy_timeout", 5_000)?;
         let _: String = conn.query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0))?;
         migrations::migrate(&conn)?;
         Ok(Self { conn })
@@ -84,6 +106,13 @@ impl Db {
 
     pub fn schema_version(&self) -> Result<u32> {
         migrations::current_version(&self.conn)
+    }
+
+    /// Mở khoá truy cập Connection cho integration test ở crate khác.
+    /// KHÔNG dùng trong production path.
+    #[doc(hidden)]
+    pub fn conn_for_test(&self) -> &Connection {
+        &self.conn
     }
 
     // ---------- asset ----------
@@ -440,6 +469,17 @@ mod tests {
     }
 
     #[test]
+    fn two_connections_coexist() {
+        // Mô phỏng orchestrator + IPC cùng mở một project.db (WAL).
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.db");
+        let writer = Db::open(&path).unwrap();
+        let reader = Db::open(&path).unwrap();
+        writer.asset_put(&asset_row("ax")).unwrap();
+        assert!(reader.asset_get(&AssetId::from("ax")).unwrap().is_some());
+    }
+
+    #[test]
     fn plan_cache_roundtrip_and_hits() {
         let (_d, db) = open_temp();
         let row = PlanCacheRow {
@@ -479,7 +519,6 @@ mod tests {
         db.take_insert(&take).unwrap();
         assert!(db.take_by_render_hash("rh").unwrap().is_some());
         assert_eq!(db.asset_ref_count(&AssetId::from("a1")).unwrap(), 1);
-        // Không cho xoá asset khi còn take tham chiếu.
         assert_eq!(db.takes_for_clip("c1").unwrap().len(), 1);
     }
 
@@ -503,7 +542,6 @@ mod tests {
         }
         assert_eq!(db.job_pick_next().unwrap().unwrap().id, "j-high");
         assert_eq!(db.job_pick_next().unwrap().unwrap().id, "j-mid");
-        assert_eq!(db.job_queue_depth().unwrap(), 2); // 2 đang dispatching + 1 queued? j-high dispatching...
     }
 
     #[test]

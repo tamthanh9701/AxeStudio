@@ -78,6 +78,22 @@ pub struct ProjectSnapshot {
     pub dirty: bool,
 }
 
+/// Thông tin một take trả về UI (take rack). Tách khỏi TakeRow nội bộ của
+/// als-project: IPC chỉ thấy kiểu này.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct TakeInfo {
+    pub id: TakeId,
+    pub clip_id: String,
+    pub plan_hash: String,
+    pub render_hash: String,
+    pub asset_id: AssetId,
+    /// Integrated loudness (LUFS), None khi postprocess đo lỗi.
+    pub lufs: Option<f64>,
+    pub true_peak_db: Option<f64>,
+    pub starred: bool,
+    pub created_at_unix: i64,
+}
+
 /// Lệnh chỉnh sửa từ UI. Mỗi lệnh phải undo được — kể cả thao tác async (plan §5).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "op", rename_all = "snake_case")]

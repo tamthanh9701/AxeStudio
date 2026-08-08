@@ -14,22 +14,24 @@ Kiểu dữ liệu tương ứng được định nghĩa tại `crates/als-core`
 | `project_open` | `{ path }` | `ProjectSnapshot` | Chạy migration nếu schema cũ hơn; từ chối nếu mới hơn app |
 | `project_save_as` | `{ path }` | `ProjectSnapshot` | Copy project sang vị trí mới, chuyển active project |
 | `project_apply_edit` | `EditCommand` | `EditResult` | Đẩy vào undo stack; emit `project:dirty` |
+| `project_undo` / `project_redo` | — | `{ label?: string }` | label rỗng khi stack hết |
 
 ### Asset
 
 | Command | Input | Output | Ghi chú |
 | --- | --- | --- | --- |
 | `asset_import` | `{ paths: string[] }` | `AssetId[]` | Decode + normalize 48kHz f32; peaks sinh async → event `peaks:ready` |
-| `asset_peaks` | `{ asset_id, zoom_level }` | binary chunk | zoom_level ∈ 0..3 tương ứng 256/1024/4096/16384 spp |
-| `asset_delete` | `{ asset_id }` | `()` | Chỉ xoá khi không còn take/clip tham chiếu |
+| `asset_peaks` | `{ asset_id, zoom_level }` | `{ spp, pairs }` | zoom_level ∈ 0..3 tương ứng 256/1024/4096/16384 spp. MVP trả JSON; nhị phân hoá ở Phase 2 nếu profiler nói cần |
+| `asset_delete` | `{ asset_id }` | `()` | Chỉ xoá khi không còn take/clip tham chiếu (`ASSET_IN_USE`) |
 
 ### Generation
 
 | Command | Input | Output | Ghi chú |
 | --- | --- | --- | --- |
-| `generate_submit` | `GenerationRecipe` | `JobId` | Vào queue, trả ngay; không chờ kết quả |
+| `generate_submit` | `{ clip_id, recipe, priority? }` | `JobId` | Vào queue, trả ngay; không chờ kết quả |
 | `job_cancel` | `{ job_id }` | `Cancelled` \| `TooLate` | `TooLate` khi job đã dispatch — UI phải nói rõ |
-| `take_promote` | `{ clip_id, take_id }` | `()` | Đổi take active của clip |
+| `take_list` | `{ clip_id }` | `TakeInfo[]` | Mới nhất trước |
+| `take_promote` | `{ clip_id, take_id }` | `EditResult` | Đổi take active của clip (qua undo stack) |
 | `take_star` | `{ take_id, starred }` | `()` | |
 | `take_delete` | `{ take_id }` | `()` | Asset giữ lại nếu take khác tham chiếu |
 
@@ -41,20 +43,29 @@ Kiểu dữ liệu tương ứng được định nghĩa tại `crates/als-core`
 | `transport_pause` | `()` | `()` |
 | `transport_seek` | `{ position_ms }` | `()` |
 | `transport_loop` | `{ start_ms, end_ms, enabled }` | `()` |
+| `transport_position` | `()` | `{ frames, playing }` |
+
+### Playhead — tại sao có `transport_position`
+
+Contract gốc nói "playhead đọc từ `AtomicU64` chia sẻ". Điều đó đúng khi UI và engine chung một process. WebView2 của Tauri là **process khác** — không share memory được. Adaptation trung thực:
+
+- UI **poll** `transport_position` trong `requestAnimationFrame` (request/response nhẹ, một consumer).
+- **CẤM** bắn event playhead từ Rust — broadcast 60fps qua IPC làm giật cả UI lẫn audio.
+- Meter cũng theo cơ chế poll này (gộp chung một call nếu cần).
 
 ### Engine
 
 | Command | Input | Output |
 | --- | --- | --- |
-| `engine_status` | `()` | `EngineStatus` — backend, models warm, vram_free_mb, queue_depth |
+| `engine_status` | `()` | `EngineStatus` — backend, model warm, VRAM, queue depth |
 | `engine_switch_backend` | `{ provider_id }` | `()` |
-| `engine_warmup` | `{ model_id }` | `JobId` |
+| `engine_warmup` | `{ model_id }` | `()` (no-op v1) |
 
 ### Export
 
 | Command | Input | Output |
 | --- | --- | --- |
-| `export_render` | `ExportSpec` | `JobId` |
+| `export_render` | `ExportSpec` | `JobId` — **Sprint 6**, scaffold trả `CAPABILITY_NOT_SUPPORTED` |
 
 ## Events (Rust → UI)
 
@@ -62,14 +73,10 @@ Kiểu dữ liệu tương ứng được định nghĩa tại `crates/als-core`
 | --- | --- | --- |
 | `job:progress` | `{ job_id, percent, stage }` | Tối đa 4 lần/giây/job, throttle ở Rust |
 | `job:state` | `{ job_id, state, error? }` | Mọi chuyển trạng thái |
+| `take:ready` | `{ job_id, clip_id, take_id, cached }` | Take sẵn sàng gắn vào clip |
 | `engine:status` | `EngineStatus` | Khi thay đổi, tối đa 1 lần/giây |
 | `peaks:ready` | `{ asset_id }` | Peaks sinh xong |
 | `project:dirty` | `{ dirty }` | Undo stack thay đổi |
-
-## KHÔNG qua event
-
-- **Playhead**: UI đọc từ `AtomicU64` chia sẻ trong `requestAnimationFrame`. Bắn event 60fps qua IPC làm giật cả UI lẫn audio.
-- **Meter**: peak/RMS đọc từ atomic ring, cùng cơ chế playhead.
 
 ## Quy ước lỗi
 
