@@ -105,6 +105,15 @@ pub enum EditCommand {
     RemoveTrack {
         track_id: TrackId,
     },
+    /// clip_id do CLIENT sinh (uuid) — generate_submit cần tham chiếu clip
+    /// ngay, không chờ vòng IPC quay lại.
+    AddClip {
+        track_id: TrackId,
+        clip_id: ClipId,
+        start_ms: u64,
+        duration_ms: u64,
+        source: ClipSource,
+    },
     MoveClip {
         clip_id: ClipId,
         to_track: TrackId,

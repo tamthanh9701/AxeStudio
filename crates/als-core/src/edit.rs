@@ -34,6 +34,11 @@ fn track_mut(arr: &mut Arrangement, track_id: &TrackId) -> Option<&mut Track> {
     arr.tracks.iter_mut().find(|t| &t.id == track_id)
 }
 
+/// Clip trên track luôn sort theo start_ms — renderer phụ thuộc vào điều này.
+fn sort_clips(track: &mut Track) {
+    track.clips.sort_by_key(|c| c.start_ms);
+}
+
 /// Áp dụng một command. Pure theo nghĩa: chỉ đụng vào `arr`, không I/O.
 pub fn apply(arr: &mut Arrangement, cmd: &EditCommand) -> Result<EditResult, IpcError> {
     match cmd {
@@ -62,6 +67,43 @@ pub fn apply(arr: &mut Arrangement, cmd: &EditCommand) -> Result<EditResult, Ipc
                 label: "Xoá track".into(),
             })
         }
+        EditCommand::AddClip {
+            track_id,
+            clip_id,
+            start_ms,
+            duration_ms,
+            source,
+        } => {
+            if *duration_ms == 0 {
+                return Err(IpcError::new(
+                    ErrorCode::InvalidRecipe,
+                    "duration_ms phải > 0",
+                ));
+            }
+            if locate(arr, clip_id).is_some() {
+                return Err(IpcError::new(
+                    ErrorCode::Internal,
+                    "clip_id đã tồn tại — client phải sinh uuid mới",
+                ));
+            }
+            let track = track_mut(arr, track_id).ok_or_else(|| not_found("track"))?;
+            track.clips.push(Clip {
+                id: clip_id.clone(),
+                start_ms: *start_ms,
+                duration_ms: *duration_ms,
+                offset_ms: 0,
+                gain_db: 0.0,
+                fade_in_ms: 0,
+                fade_out_ms: 0,
+                source: source.clone(),
+                generation: None,
+                active_take: None,
+            });
+            sort_clips(track);
+            Ok(EditResult {
+                label: "Thêm clip".into(),
+            })
+        }
         EditCommand::MoveClip {
             clip_id,
             to_track,
@@ -72,8 +114,7 @@ pub fn apply(arr: &mut Arrangement, cmd: &EditCommand) -> Result<EditResult, Ipc
             clip.start_ms = *start_ms;
             let target = track_mut(arr, to_track).ok_or_else(|| not_found("track đích"))?;
             target.clips.push(clip);
-            // Clip trên track luôn sort theo start_ms — renderer phụ thuộc vào điều này.
-            target.clips.sort_by_key(|c| c.start_ms);
+            sort_clips(target);
             Ok(EditResult {
                 label: "Di chuyển clip".into(),
             })
@@ -118,7 +159,7 @@ pub fn apply(arr: &mut Arrangement, cmd: &EditCommand) -> Result<EditResult, Ipc
             let left = &mut track.clips[ci];
             left.duration_ms = *at_ms - left.start_ms;
             track.clips.push(right);
-            track.clips.sort_by_key(|c| c.start_ms);
+            sort_clips(track);
             Ok(EditResult {
                 label: "Split clip".into(),
             })
@@ -256,6 +297,37 @@ mod tests {
     }
 
     #[test]
+    fn add_clip_uses_client_id_and_sorts() {
+        let (mut arr, track, _c) = one_clip_arrangement();
+        let early = ClipId::new();
+        apply(
+            &mut arr,
+            &EditCommand::AddClip {
+                track_id: track.clone(),
+                clip_id: early.clone(),
+                start_ms: 0,
+                duration_ms: 5_000,
+                source: ClipSource::Generated,
+            },
+        )
+        .unwrap();
+        // Clip gốc ở 0..10_000, clip mới cũng ở 0 — trùng start thì thứ tự ổn định.
+        assert_eq!(arr.tracks[0].clips.len(), 2);
+        // Trùng id bị chặn.
+        let dup = apply(
+            &mut arr,
+            &EditCommand::AddClip {
+                track_id: track,
+                clip_id: early,
+                start_ms: 99_000,
+                duration_ms: 1_000,
+                source: ClipSource::Generated,
+            },
+        );
+        assert!(dup.is_err());
+    }
+
+    #[test]
     fn split_is_sample_accurate_to_ms() {
         let (mut arr, _t, clip) = one_clip_arrangement();
         apply(
@@ -281,7 +353,7 @@ mod tests {
             &mut arr,
             &EditCommand::SplitClip {
                 clip_id: clip.clone(),
-                at_ms: 10_000, // mép phải — không hợp lệ
+                at_ms: 10_000,
             },
         )
         .is_err());
@@ -291,7 +363,6 @@ mod tests {
     #[test]
     fn move_clip_keeps_track_sorted() {
         let (mut arr, track, clip) = one_clip_arrangement();
-        // Thêm clip thứ hai ở đầu timeline, rồi move clip gốc về sau nó.
         let second = ClipId::new();
         arr.tracks[0].clips.push(Clip {
             id: second,
