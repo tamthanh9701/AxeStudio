@@ -1,0 +1,16 @@
+[package]
+name = "als-assets"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+als-core.workspace = true
+blake3.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
