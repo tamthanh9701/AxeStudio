@@ -111,7 +111,10 @@ export function TimelineView() {
     ),
   )
 
-  const seekAt = (e: { clientX: number; currentTarget: { getBoundingClientRect(): { left: number } } }) => {
+  const seekAt = (e: {
+    clientX: number
+    currentTarget: { getBoundingClientRect(): { left: number } }
+  }) => {
     const rect = e.currentTarget.getBoundingClientRect()
     const ms = Math.max(0, (e.clientX - rect.left) / pxPerMs)
     void ipc.transportSeek(Math.round(ms)).catch(() => {})
@@ -124,11 +127,7 @@ export function TimelineView() {
         <button onClick={() => setPxPerMs(Math.min(0.5, pxPerMs * 1.25))}>+</button>
         <span className="dim">{(pxPerMs * 1000).toFixed(0)} px/s</span>
       </div>
-      <div
-        className="ruler"
-        style={{ marginLeft: layoutTokens.trackHeaderWidth }}
-        onClick={seekAt}
-      >
+      <div className="ruler" style={{ marginLeft: layoutTokens.trackHeaderWidth }} onClick={seekAt}>
         {Array.from({ length: Math.ceil(totalMs / 5000) + 1 }, (_, i) => (
           <span key={i} className="tick" style={{ left: i * 5000 * pxPerMs }}>
             {i * 5}s

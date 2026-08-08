@@ -56,7 +56,7 @@ PASS: diff rỗng (placeholder viết tay khớp output thật) hoặc diff nh�
 commit bản generate **thay thế** placeholder — từ đây file này là
 auto-generated thật sự.
 
-## 4. Frontend
+## 4. Frontend + luồng nghiệp vụ đầu cuối
 
 ```powershell
 pnpm typecheck
@@ -64,8 +64,14 @@ pnpm test
 pnpm dev
 ```
 
-PASS: typecheck sạch; vitest xanh (rules.test.ts); app mở ra, tạo project,
-bấm Generate → clip xuất hiện → take sine nghe được (MockProvider).
+PASS: typecheck sạch; vitest xanh (rules.test.ts). Trong app:
+
+1. Tạo project → bấm **Generate** (MockProvider) → clip xuất hiện với
+   **waveform** sau vài giây.
+2. Bấm **▶** → nghe take sine; click ruler/lane → playhead nhảy đúng chỗ.
+3. **Export WAV** → file 24-bit xuất hiện kèm sidecar `.meta.json`.
+4. Đổi backend ở header (mock/cpp/py) — cpp/py sẽ báo chưa sẵn sàng cho tới
+   khi Phase 0 xong; đó là hành vi đúng, không phải lỗi.
 
 ## 5. Sau khi xanh toàn bộ
 
@@ -78,8 +84,8 @@ Phần kiểm chứng được mà không cần build Rust — đã chạy và P
 
 | Kiểm | Kết quả |
 | --- | --- |
-| `tsc` strict (exactOptionalPropertyTypes, verbatimModuleSyntax) toàn bộ frontend + packages | PASS |
-| Prettier `--check` file viết tay | PASS |
+| `tsc` strict (exactOptionalPropertyTypes, verbatimModuleSyntax) toàn bộ frontend + packages, gồm lớp playback/export mới | PASS |
+| Prettier `--check` file viết tay (đúng config repo) | PASS |
 | YAML workflow `ci.yml` / `release.yml` parse | PASS |
 | `scripts/collect-bench.mjs` + `bench-perf-budget.mjs` (3 chiều: đủ số pass / vượt budget fail / thiếu report fail) | PASS |
 | `cargo build/test/clippy` | chưa chạy — cần máy thật (bước 2) |

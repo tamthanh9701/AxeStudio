@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react"
 import { explainError, ipc, SAMPLE_RATE } from "./ipc/client"
-import { onJobProgress, onJobState, onProjectDirty, onTakeReady } from "./ipc/events"
+import {
+  onJobProgress,
+  onJobState,
+  onProjectDirty,
+  onTakeReady,
+} from "./ipc/events"
 import { useStudio } from "./state/store"
 import { GeneratePanel } from "./features/generate/GeneratePanel"
 import { TimelineView } from "./features/timeline/TimelineView"
@@ -113,7 +118,11 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <span className="logo">AxeStudio</span>
-        <input value={path} onChange={(e) => setPath(e.target.value)} placeholder="đường dẫn project" />
+        <input
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+          placeholder="đường dẫn project"
+        />
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="tên project" />
         <button onClick={() => void open()}>Mở</button>
         <button onClick={() => void create()}>Tạo mới</button>
