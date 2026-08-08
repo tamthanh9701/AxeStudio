@@ -6,8 +6,8 @@ use crate::events::OrchEvent;
 use crate::registry::Registry;
 use als_assets::AssetStore;
 use als_core::{
-    plan_hash, priority, render_hash, AssetId, EngineStatus, GenerationRecipe, JobId, JobKind,
-    JobState, ProviderId, TakeId,
+    plan_hash, render_hash, AssetId, EngineStatus, GenerationRecipe, JobId, JobKind, JobState,
+    ProviderId, TakeId,
 };
 use als_project::{AssetRow, Db, JobRow, PlanCacheRow, TakeRow};
 use als_provider::{
@@ -577,7 +577,3 @@ enum Preparation {
     Started(InFlight),
     CacheHitDone,
 }
-
-// Giữ import dùng trong test/IPC không báo unused.
-#[allow(unused_imports)]
-use als_core::priority as _priority_reexport;

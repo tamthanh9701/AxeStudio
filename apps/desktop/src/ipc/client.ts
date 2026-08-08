@@ -1,6 +1,8 @@
 /**
  * Wrapper DUY NHẤT gọi IPC. Component CẤM gọi invoke trực tiếp (AGENTS.md §7).
  * Tên tham số camelCase — Tauri tự chuyển sang snake_case phía Rust.
+ *
+ * Mọi kiểu dữ liệu đến từ @als/bindings — CẤM định nghĩa lại ở đây.
  */
 import { invoke } from "@tauri-apps/api/core"
 import type {
@@ -10,24 +12,18 @@ import type {
   EditOutcome,
   EngineStatus,
   GenerationRecipe,
+  PeakView,
   ProjectSnapshot,
   TakeInfo,
   TransportPosition,
+  UndoOutcome,
 } from "@als/bindings"
+
+// Tiện cho component import một chỗ — vẫn là re-export, không phải định nghĩa mới.
+export type { PeakView, UndoOutcome } from "@als/bindings"
 
 /** Sample rate chuẩn toàn hệ thống (plan §5 — chốt 48kHz). */
 export const SAMPLE_RATE = 48_000
-
-/** Trả về của asset_peaks — giữ đồng bộ với PeakView trong commands.rs. */
-export interface PeakView {
-  spp: number
-  pairs: [number, number][]
-}
-
-export interface UndoOutcome {
-  label: string | null
-  snapshot: ProjectSnapshot | null
-}
 
 export const ipc = {
   // project

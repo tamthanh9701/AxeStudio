@@ -153,6 +153,9 @@ export type EditResult = { label: string }
 /// project_apply_edit trả cả snapshot mới — UI không bao giờ được lệch state.
 export type EditOutcome = { edit: EditResult; snapshot: ProjectSnapshot }
 
+/// project_undo / project_redo.
+export type UndoOutcome = { label: string | null; snapshot: ProjectSnapshot | null }
+
 // ---------- job / engine ----------
 export type JobKind = "plan" | "render" | "understand" | "extract" | "lego" | "export"
 export type JobState =

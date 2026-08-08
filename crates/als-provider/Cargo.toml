@@ -17,6 +17,8 @@ specta.workspace = true
 hound.workspace = true
 tempfile.workspace = true
 tracing.workspace = true
+# mock.rs suy seed từ blake3(audio_codes) khi recipe không chỉ định seed.
+blake3.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

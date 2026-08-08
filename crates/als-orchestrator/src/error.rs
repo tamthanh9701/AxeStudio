@@ -1,4 +1,4 @@
-use als_core::{ErrorCode, IpcError};
+use als_core::{ErrorCode, HashError, IpcError};
 use als_assets::StoreError;
 use als_media::MediaError;
 use als_project::ProjectError;
@@ -17,6 +17,10 @@ pub enum OrchError {
     Media(#[from] MediaError),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    /// plan_hash/render_hash fail — thực tế chỉ khi canonicalize gặp số
+    /// không hữu hạn, nhưng phải có nhánh này để `?` dùng được.
+    #[error(transparent)]
+    Hash(#[from] HashError),
     #[error("recipe không hợp lệ: {0}")]
     InvalidRecipe(#[from] IpcError),
     #[error("job không tồn tại hoặc đã kết thúc: {0}")]
@@ -38,6 +42,7 @@ impl From<OrchError> for IpcError {
             OrchError::Store(se) => IpcError::new(ErrorCode::Io, se.to_string()),
             OrchError::Media(me) => IpcError::new(ErrorCode::Internal, me.to_string()),
             OrchError::Json(je) => IpcError::new(ErrorCode::Internal, je.to_string()),
+            OrchError::Hash(he) => IpcError::new(ErrorCode::Internal, he.to_string()),
         }
     }
 }
