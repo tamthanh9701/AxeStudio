@@ -1,14 +1,13 @@
 // ============================================================================
-// AUTO-GENERATED — CẤM SỬA TAY.
+// AUTO-GENERATED bởi tauri-specta (`pnpm bindings:generate`). KHÔNG SỬA TAY.
 //
-// Sinh bởi: pnpm bindings:generate  (cargo run -p als-desktop --bin export-bindings)
-// CI job `bindings-drift` fail nếu file này lệch với Rust types ở als-core.
-//
-// BẢN PLACEHOLDER: viết tay khớp serde shape để frontend develop được ngay.
-// Lần chạy `bindings:generate` đầu tiên sẽ ghi đè file này.
+// ⚠️  PLACEHOLDER BOOTSTRAP: bản này viết tay cho tới khi Rust compile được
+// lần đầu (cargo cần máy thật). Ngay sau lần `pnpm bindings:generate` đầu
+// tiên, commit bản sinh ra thay thế file này. CI bindings-drift sẽ bắt mọi
+// lệch sau đó.
 // ============================================================================
 
-// ---------- id newtypes ----------
+// ---------- ID newtypes (string ở runtime) ----------
 export type JobId = string
 export type ClipId = string
 export type TakeId = string
@@ -18,7 +17,7 @@ export type AssetId = string
 export type ProviderId = string
 export type ModelId = string
 
-// ---------- error (SCREAMING_SNAKE_CASE — khớp serde rename_all) ----------
+// ---------- error ----------
 export type ErrorCode =
   | "PROJECT_NOT_FOUND"
   | "PROJECT_CORRUPT"
@@ -126,7 +125,7 @@ export type TakeInfo = {
   created_at_unix: number
 }
 
-// ---------- edit ----------
+// ---------- edit / undo ----------
 export type EditCommand =
   | { op: "add_track"; kind: TrackKind; name: string }
   | { op: "remove_track"; track_id: TrackId }
@@ -149,11 +148,7 @@ export type EditCommand =
   | { op: "remove_clip"; clip_id: ClipId }
 
 export type EditResult = { label: string }
-
-/// project_apply_edit trả cả snapshot mới — UI không bao giờ được lệch state.
 export type EditOutcome = { edit: EditResult; snapshot: ProjectSnapshot }
-
-/// project_undo / project_redo.
 export type UndoOutcome = { label: string | null; snapshot: ProjectSnapshot | null }
 
 // ---------- job / engine ----------
@@ -184,7 +179,7 @@ export type ExportSpec = {
   include_metadata: boolean
 }
 
-// ---------- provider ----------
+// ---------- provider (đẩy qua event / trả từ command) ----------
 export type Capability =
   | "text2music"
   | "cover"
@@ -216,13 +211,20 @@ export type ModelDescriptor = {
   warm: boolean
 }
 
-// ---------- event payloads (Rust → UI) ----------
+// ---------- event payload ----------
 export type JobStateEvent = { job_id: JobId; state: JobState; error: string | null }
 export type JobProgressEvent = { job_id: JobId; percent: number; stage: ProgressStage }
 export type TakeReadyEvent = { job_id: JobId; clip_id: string; take_id: TakeId; cached: boolean }
 export type PeaksReadyEvent = { asset_id: AssetId }
 export type ProjectDirtyEvent = { dirty: boolean }
 
-// ---------- misc views ----------
+// ---------- src-tauri owned types (định nghĩa ở commands.rs) ----------
 export type TransportPosition = { frames: number; playing: boolean }
 export type PeakView = { spp: number; pairs: [number, number][] }
+export type AssetInfo = {
+  id: string
+  kind: string
+  duration_ms: number | null
+  sample_rate: number | null
+  channels: number | null
+}

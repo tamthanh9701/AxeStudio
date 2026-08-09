@@ -11,7 +11,7 @@
 use crate::state::AppState;
 use als_assets::AssetStore;
 use als_audio::{db_to_linear, AudioConfig, AudioSource, BufferSource, EngineBuilder};
-use als_core::{AssetId, ErrorCode, ExportRange, ExportSpec, IpcError, Track};
+use als_core::{AssetId, ClipSource, ErrorCode, ExportRange, ExportSpec, IpcError, Track};
 use als_media::AudioBuffer;
 use als_project::{Db, Project};
 use tauri::State;
@@ -24,16 +24,24 @@ fn to_frames(ms: u64) -> usize {
     (ms * SR / 1000) as usize
 }
 
-/// Giải mã audio của một clip (qua take active → asset → decode → 48k).
+/// Giải mã audio của một clip → (buffer 48k, gain tuyến tính).
+/// Clip GENERATE lấy audio qua take active; clip IMPORT không có take —
+/// lấy thẳng từ ClipSource::Imported.asset.
 fn clip_audio(
     clip: &als_core::Clip,
     db: &Db,
     store: &AssetStore,
 ) -> Option<(AudioBuffer, f32)> {
-    let take_id = clip.active_take.as_ref()?;
-    let takes = db.takes_for_clip(clip.id.as_str()).ok()?;
-    let take = takes.iter().find(|t| t.id == take_id.as_str())?;
-    let asset = db.asset_get(&AssetId::from(take.asset_id.clone())).ok()??;
+    let asset_id = match &clip.source {
+        ClipSource::Imported { asset } => asset.clone(),
+        ClipSource::Generated => {
+            let take_id = clip.active_take.as_ref()?;
+            let takes = db.takes_for_clip(clip.id.as_str()).ok()?;
+            let take = takes.iter().find(|t| t.id == take_id.as_str())?;
+            AssetId::from(take.asset_id.clone())
+        }
+    };
+    let asset = db.asset_get(&asset_id).ok()??;
     let path = store.abs_path(&asset.rel_path);
     let buf = als_media::decode::decode_file(&path).ok()?;
     let buf = match als_media::resample::to_target_rate(&buf) {
@@ -69,7 +77,7 @@ fn consolidate_track(track: &Track, db: &Db, store: &AssetStore) -> BufferSource
             let si = (offset + f) * ch;
             let di = (start + f) * 2;
             let l = buf.samples.get(si).copied().unwrap_or(0.0);
-            // Stereo: R ở si+1. Mono: R = L (trước đây đọc nhầm sang frame kế).
+            // Stereo: R ở si+1. Mono: R = L.
             let r = if ch >= 2 {
                 buf.samples.get(si + 1).copied().unwrap_or(0.0)
             } else {
@@ -174,7 +182,7 @@ pub fn bounce(
     let mut mixer = Mixer::new();
     let mut sources: Vec<Option<Box<dyn AudioSource>>> = Vec::with_capacity(tracks.len());
     for track in tracks {
-        sources.push(Some(Box::new(consolidate_track(track, &db, store))));
+        sources.push(Some(Box::new(consolidate_track(track, &db, &store))));
         let idx = mixer.add_track().expect("tối đa 32 track");
         let st = &mut mixer.tracks[idx];
         st.set_gain(db_to_linear(track.gain_db));

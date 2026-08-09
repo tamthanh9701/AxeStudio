@@ -20,6 +20,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::project_undo,
         commands::project_redo,
         commands::asset_import,
+        commands::asset_get,
         commands::asset_peaks,
         commands::generate_submit,
         commands::job_cancel,

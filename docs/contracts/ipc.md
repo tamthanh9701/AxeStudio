@@ -21,8 +21,9 @@ Kiểu dữ liệu tương ứng được định nghĩa tại `crates/als-core`
 | Command | Input | Output | Ghi chú |
 | --- | --- | --- | --- |
 | `asset_import` | `{ paths: string[] }` | `AssetId[]` | Decode + normalize 48kHz f32; peaks sinh trong cùng lượt → event `peaks:ready` |
+| `asset_get` | `{ asset_id }` | `AssetInfo` | Metadata (duration, sample rate, channels) — UI import đặt clip theo độ dài thật |
 | `asset_peaks` | `{ asset_id, zoom_level }` | `PeakView { spp, pairs }` | zoom_level ∈ 0..3 tương ứng 256/1024/4096/16384 spp. MVP trả JSON; nhị phân hoá ở Phase 2 nếu profiler nói cần |
-| `asset_delete` | `{ asset_id }` | `()` | Chỉ xoá khi không còn take/clip tham chiếu (`ASSET_IN_USE`) |
+| `asset_delete` | `{ asset_id }` | `()` | Chỉ xoá khi không còn take/clip tham chiếu (`ASSET_IN_USE`) — chưa implement ở v1 |
 
 ### Generation
 
@@ -81,6 +82,7 @@ Contract gốc nói "playhead đọc từ `AtomicU64` chia sẻ". Điều đó �
 ## Playback wiring (v1)
 
 - Mỗi track được **consolidate** thành một buffer timeline-absolute lúc: mở project, `project_apply_edit`, undo/redo, `take_promote`, event `take:ready` (`src-tauri/player.rs`).
+- Clip **import** resolve audio trực tiếp từ `ClipSource::Imported.asset`; clip **generate** resolve qua `active_take` → asset.
 - Engine rebuild mỗi lần refresh (click ~50ms, chấp nhận được ở v1). S2 thay bằng streaming per-clip + live swap (arc-swap).
 - Consolidation bị chặn ở 5 phút/track để không bùng RAM với arrangement dài.
 
