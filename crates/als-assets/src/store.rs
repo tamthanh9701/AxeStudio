@@ -9,7 +9,7 @@
 //! ```
 
 use als_core::AssetId;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -103,6 +103,7 @@ impl AssetStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn put_is_idempotent_and_dedupes() {

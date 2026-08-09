@@ -6,8 +6,8 @@ use crate::events::OrchEvent;
 use crate::registry::Registry;
 use als_assets::AssetStore;
 use als_core::{
-    plan_hash, render_hash, AssetId, EngineStatus, GenerationRecipe, JobId, JobKind, JobState,
-    ProviderId, TakeId,
+    plan_hash, render_hash, EngineStatus, GenerationRecipe, JobId, JobKind, JobState, ProviderId,
+    TakeId,
 };
 use als_project::{AssetRow, Db, JobRow, PlanCacheRow, TakeRow};
 use als_provider::{
@@ -231,7 +231,9 @@ impl Orchestrator {
                     self.emit(OrchEvent::Progress(p));
                 }
                 outcome = async {
-                    self.current.as_mut().expect("guarded").fut.await
+                    // fut.as_mut() → Pin<&mut dyn Future> impl Future — không
+                    // move future ra khỏi &mut borrow (E0507).
+                    self.current.as_mut().expect("guarded").fut.as_mut().await
                 }, if self.current.is_some() => {
                     self.finish_job(outcome).await;
                 }

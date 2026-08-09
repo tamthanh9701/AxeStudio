@@ -5,7 +5,7 @@
 //! Hai connection cùng process là bình thường: orchestrator giữ một, tầng IPC
 //! giữ một. WAL + busy_timeout đảm bảo writer-writer không nổ SQLITE_BUSY.
 
-use crate::error::{ProjectError, Result};
+use crate::error::Result;
 use crate::migrations;
 use als_core::{AssetId, JobId, JobKind, JobState, TakeId, TakeInfo};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -425,6 +425,7 @@ fn _assert_job_state_serializes() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::ProjectError;
 
     fn open_temp() -> (tempfile::TempDir, Db) {
         let dir = tempfile::tempdir().unwrap();
