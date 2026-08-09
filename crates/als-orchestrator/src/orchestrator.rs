@@ -458,7 +458,7 @@ impl Orchestrator {
         };
         self.progress_rx = None;
         match outcome {
-            Ok((plan, out)) => match self.postprocess(&cur, plan, out).await {
+            Ok((plan, out)) => match self.postprocess(&cur, plan, out) {
                 Ok(take_id) => {
                     self.set_job_state(&cur.job_id, JobState::Done, None);
                     self.emit(OrchEvent::TakeReady {
@@ -484,7 +484,13 @@ impl Orchestrator {
     /// Render xong: backfill plan_cache → asset store → decode → loudness →
     /// peaks → take row. Lỗi postprocess = job failed (file đã sinh không bị
     /// nuốt — nó nằm trong store và tìm lại được bằng render_hash lần sau).
-    async fn postprocess(
+    ///
+    /// GIỮ HÀM NÀY SYNC: nó không await gì cả, và bắt nó async với `&self`
+    /// + `&InFlight` sẽ phá tính Send của future run() — rusqlite Connection
+    /// (và future trait object trong InFlight) là Send-nhưng-không-Sync.
+    /// Decode/loudness blocking vài chục ms trên task này là chấp nhận được ở
+    /// v1; nếu profiler kêu, chuyển phần nặng sang spawn_blocking với owned data.
+    fn postprocess(
         &self,
         cur: &InFlight,
         plan: PlanOutput,

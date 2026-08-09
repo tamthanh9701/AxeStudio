@@ -117,10 +117,11 @@ impl Mixer {
             };
             for f in 0..frames {
                 let (l, r) = src.next_frame();
-                // get() thay indexing — không bao giờ panic trong RT path.
-                if let (Some(ol), Some(or)) = (out.get_mut(f * 2), out.get_mut(f * 2 + 1)) {
-                    *ol += l * state.gain_l;
-                    *or += r * state.gain_r;
+                // Một get_mut cho cả cặp kênh — hai lời gọi trong cùng expression
+                // là borrow đôi (E0499). Range OOB → None → bỏ qua, không panic.
+                if let Some(pair) = out.get_mut(f * 2..f * 2 + 2) {
+                    pair[0] += l * state.gain_l;
+                    pair[1] += r * state.gain_r;
                 }
             }
         }

@@ -1,7 +1,7 @@
 //! CppProvider — map trait RenderProvider → ace-server endpoints.
 
 use crate::client::AceServerClient;
-use als_core::{JobId, ModelTier, ProviderId, TaskType};
+use als_core::{JobId, ModelTier, ProviderId};
 use als_provider::{
     AudioAnalysis, AudioBlob, AudioFormat, CancelOutcome, Capability, Health, JobCtx,
     ModelDescriptor, ModelId, PlanInput, PlanOutput, ProgressStage, ProviderError, RenderInput,
@@ -95,9 +95,7 @@ impl RenderProvider for CppProvider {
         match self.client.props().await {
             Ok(v) => Ok(Health {
                 ready: true,
-                vram_free_mb: v
-                    .get("vram_free_mb")
-                    .and_then(|x| x.as_u64()),
+                vram_free_mb: v.get("vram_free_mb").and_then(|x| x.as_u64()),
                 loaded_models: self.models.iter().map(|m| m.id.clone()).collect(),
                 detail: Some(v.to_string()),
             }),
@@ -225,6 +223,7 @@ impl RenderProvider for CppProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use als_core::TaskType;
 
     #[test]
     fn extract_codes_tolerates_field_variants() {

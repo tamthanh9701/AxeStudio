@@ -136,8 +136,9 @@ impl AcestepApiClient {
             .send()
             .await
             .map_err(|e| ProviderError::Http(e.to_string()))?;
-        let mut list: Vec<TaskResult> = self.unwrap(res, "/query_result").await?;
-        list.drain(..)
+        let list: Vec<TaskResult> = self.unwrap(res, "/query_result").await?;
+        // into_iter tiêu thụ Vec — không giữ borrow nào qua expression cuối block.
+        list.into_iter()
             .next()
             .ok_or_else(|| ProviderError::InvalidResponse("query_result rỗng".into()))
     }
