@@ -7,6 +7,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import type {
   AssetId,
+  AssetInfo,
   CancelOutcome,
   EditCommand,
   EditOutcome,
@@ -38,6 +39,7 @@ export const ipc = {
 
   // asset
   assetImport: (paths: string[]) => invoke<AssetId[]>("asset_import", { paths }),
+  assetGet: (assetId: string) => invoke<AssetInfo>("asset_get", { assetId }),
   assetPeaks: (assetId: string, zoomLevel: number) =>
     invoke<PeakView>("asset_peaks", { assetId, zoomLevel }),
 

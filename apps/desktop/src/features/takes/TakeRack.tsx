@@ -1,16 +1,36 @@
 /**
- * Take rack — danh sách take của clip đang chọn. A/B, star, promote, xoá.
- * Audio preview (nghe từng take) đến ở S6 khi engine wiring xong streaming.
+ * Take rack — danh sách take của clip đang chọn, mới nhất trên cùng.
+ * Mỗi take có mini-waveform từ peaks, star, promote (đổi take active qua
+ * undo stack), delete. A/B nghe bằng cách promote rồi Play.
  */
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { explainError, ipc } from "../../ipc/client"
 import { useStudio } from "../../state/store"
+import { getPeaks } from "../timeline/peaksCache"
+import { drawWaveform } from "../timeline/waveform"
+
+function TakeWave({ assetId }: { assetId: string }) {
+  const ref = useRef<HTMLCanvasElement | null>(null)
+  useEffect(() => {
+    let alive = true
+    void getPeaks(assetId).then((pv) => {
+      if (!alive || !pv) return
+      const canvas = ref.current
+      if (!canvas) return
+      canvas.width = Math.max(1, Math.floor(canvas.clientWidth))
+      canvas.height = Math.max(1, Math.floor(canvas.clientHeight))
+      drawWaveform(canvas, pv.pairs)
+    })
+    return () => {
+      alive = false
+    }
+  }, [assetId])
+  return <canvas ref={ref} className="take-wave" />
+}
 
 export function TakeRack() {
   const selectedClipId = useStudio((s) => s.selectedClipId)
-  const takes = useStudio((s) =>
-    s.selectedClipId ? (s.takes[s.selectedClipId] ?? null) : null,
-  )
+  const takes = useStudio((s) => (s.selectedClipId ? (s.takes[s.selectedClipId] ?? null) : null))
 
   useEffect(() => {
     if (!selectedClipId) return
@@ -55,12 +75,14 @@ export function TakeRack() {
                 <span className="take-actions">
                   <button
                     title={t.starred ? "Bỏ star" : "Star"}
-                    onClick={() => void ipc.takeStar(t.id, !t.starred).then(() => {
-                      const list = takes.map((x) =>
-                        x.id === t.id ? { ...x, starred: !t.starred } : x,
-                      )
-                      useStudio.getState().setTakes(selectedClipId, list)
-                    })}
+                    onClick={() =>
+                      void ipc.takeStar(t.id, !t.starred).then(() => {
+                        const list = takes.map((x) =>
+                          x.id === t.id ? { ...x, starred: !t.starred } : x,
+                        )
+                        useStudio.getState().setTakes(selectedClipId, list)
+                      })
+                    }
                   >
                     {t.starred ? "★" : "☆"}
                   </button>
@@ -82,6 +104,7 @@ export function TakeRack() {
                   </button>
                 </span>
               </div>
+              <TakeWave assetId={t.asset_id} />
               <div className="dim take-meta">
                 {new Date(t.created_at_unix * 1000).toLocaleString("vi-VN")}
               </div>

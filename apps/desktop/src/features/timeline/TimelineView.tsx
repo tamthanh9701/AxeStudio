@@ -1,41 +1,83 @@
 /**
  * Timeline v1.5 — waveform thật từ peaks (canvas per clip), click-to-seek,
- * zoom, ruler ticks. Sprint 4 thay renderer bằng @als/timeline (PixiJS) khi
- * cần 60fps với 24 track/200 clip; luồng dữ liệu (snapshot + peaks + playhead
+ * zoom, ruler ticks, điều khiển track (mute/solo/gain). Sprint 4 thay renderer
+ * bằng @als/timeline (PixiJS); luồng dữ liệu (snapshot + peaks + playhead
  * poll) giữ nguyên.
  */
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { layout as layoutTokens } from "@als/ui"
 import { ipc } from "../../ipc/client"
 import { useStudio } from "../../state/store"
 import { getPeaks } from "./peaksCache"
-import type { Clip } from "@als/bindings"
+import { drawWaveform } from "./waveform"
+import type { Clip, EditCommand, Track } from "@als/bindings"
 
-function drawWaveform(canvas: HTMLCanvasElement, pairs: [number, number][]) {
-  const ctx = canvas.getContext("2d")
-  if (!ctx) return
-  const w = canvas.width
-  const h = canvas.height
-  if (w <= 0 || h <= 0) return
-  ctx.clearRect(0, 0, w, h)
-  ctx.fillStyle = "#c9c4ff"
-  const mid = h / 2
-  const n = pairs.length
-  if (n === 0) return
-  for (let x = 0; x < w; x++) {
-    const i = Math.min(n - 1, Math.floor((x / w) * n))
-    const [lo, hi] = pairs[i] ?? [0, 0]
-    const y1 = mid - hi * (mid - 1)
-    const y2 = mid - lo * (mid - 1)
-    ctx.fillRect(x, y1, 1, Math.max(1, y2 - y1))
+function applyTrackEdit(cmd: EditCommand) {
+  void ipc
+    .applyEdit(cmd)
+    .then((out) => useStudio.getState().setSnapshot(out.snapshot))
+    .catch(() => {})
+}
+
+function TrackHeader({ track }: { track: Track }) {
+  // Gain: kéo là preview local, chỉ commit (vào undo stack) khi thả chuột/blur —
+  // tránh spam hàng chục edit cho một lần kéo slider.
+  const [gain, setGain] = useState(track.gain_db)
+  useEffect(() => setGain(track.gain_db), [track.gain_db])
+
+  const commitGain = () => {
+    if (gain !== track.gain_db) {
+      applyTrackEdit({ op: "set_track_gain", track_id: track.id, gain_db: gain })
+    }
   }
+
+  return (
+    <div className="track-header" style={{ width: layoutTokens.trackHeaderWidth }}>
+      <div className="track-title">
+        <span>{track.name}</span>
+        <span className="dim">{track.kind}</span>
+      </div>
+      <div className="track-controls">
+        <button
+          className={track.mute ? "tctl tctl-on" : "tctl"}
+          title="Mute"
+          onClick={() =>
+            applyTrackEdit({ op: "set_track_mute", track_id: track.id, mute: !track.mute })
+          }
+        >
+          M
+        </button>
+        <button
+          className={track.solo ? "tctl tctl-on" : "tctl"}
+          title="Solo"
+          onClick={() =>
+            applyTrackEdit({ op: "set_track_solo", track_id: track.id, solo: !track.solo })
+          }
+        >
+          S
+        </button>
+        <input
+          type="range"
+          min={-24}
+          max={6}
+          step={0.5}
+          value={gain}
+          title={`${gain.toFixed(1)} dB`}
+          onChange={(e) => setGain(Number(e.target.value))}
+          onPointerUp={commitGain}
+          onBlur={commitGain}
+        />
+      </div>
+    </div>
+  )
 }
 
 function ClipView(props: { clip: Clip; pxPerMs: number; selected: boolean }) {
   const { clip, pxPerMs, selected } = props
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const take = useStudio((s) => s.takes[clip.id]?.find((t) => t.id === clip.active_take))
-  const assetId = take?.asset_id ?? null
+  // Clip import không có take — lấy asset thẳng từ source.
+  const assetId = take?.asset_id ?? (clip.source.type === "imported" ? clip.source.asset : null)
   const widthPx = Math.max(10, clip.duration_ms * pxPerMs)
 
   useEffect(() => {
@@ -66,10 +108,10 @@ function ClipView(props: { clip: Clip; pxPerMs: number; selected: boolean }) {
         e.stopPropagation()
         useStudio.getState().selectClip(clip.id)
       }}
-      title={clip.active_take ? "đã có take" : "chưa có take — Generate"}
+      title={assetId ? "có audio" : "chưa có take — Generate"}
     >
       <canvas ref={canvasRef} className="clip-wave" />
-      {!clip.active_take && <span className="clip-empty">…</span>}
+      {!assetId && <span className="clip-empty">…</span>}
     </button>
   )
 }
@@ -81,7 +123,7 @@ export function TimelineView() {
   const pxPerMs = useStudio((s) => s.pxPerMs)
   const setPxPerMs = useStudio((s) => s.setPxPerMs)
 
-  // Nạp take list cho mọi clip có active_take mà store chưa cache.
+  // Nạp take list cho mọi clip generate có active_take mà store chưa cache.
   useEffect(() => {
     if (!snapshot) return
     for (const track of snapshot.arrangement.tracks) {
@@ -145,10 +187,7 @@ export function TimelineView() {
       )}
       {snapshot.arrangement.tracks.map((track) => (
         <div className="track" key={track.id} style={{ height: layoutTokens.trackHeight }}>
-          <div className="track-header" style={{ width: layoutTokens.trackHeaderWidth }}>
-            <span>{track.name}</span>
-            <span className="dim">{track.kind}</span>
-          </div>
+          <TrackHeader track={track} />
           <div className="track-lane" onClick={seekAt}>
             {track.clips.map((clip) => (
               <ClipView
