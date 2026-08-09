@@ -232,7 +232,11 @@ mod tests {
 
     #[test]
     fn py_declares_no_split_and_no_cancel() {
-        let p = PyProvider::new("http://127.0.0.1:8001", None, Arc::new(|_| None));
+        // Ghi RÕ kiểu: `AssetResolver` là `dyn Fn` (unsized), suy kiểu closure
+        // từ `Arc::new(|_| None)` ngay tại vị trí tham số là không chắc chắn.
+        // Annotate biến trước rồi truyền vào — cùng lớp lỗi với no_resolve().
+        let resolve: Arc<AssetResolver> = Arc::new(|_: &als_core::AssetId| None);
+        let p = PyProvider::new("http://127.0.0.1:8001", None, resolve);
         assert!(!p.capabilities().contains(&Capability::SplitPlanRender));
         assert!(!p.capabilities().contains(&Capability::CancelRunningJob));
         assert!(p.capabilities().contains(&Capability::Repaint));

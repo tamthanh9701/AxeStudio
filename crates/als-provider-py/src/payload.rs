@@ -164,8 +164,16 @@ mod tests {
         }
     }
 
-    fn no_resolve() -> AssetResolver {
-        |_| None
+    /// `AssetResolver` là type alias UNSIZED (`dyn Fn`), nên KHÔNG dùng được làm
+    /// kiểu trả về: return type của hàm buộc phải `Sized` (E0277). Trả closure
+    /// cụ thể qua `impl Fn` — tại call site `&no_resolve()` vẫn tự coerce thành
+    /// `&AssetResolver`, nên 4 chỗ gọi bên dưới không phải sửa.
+    ///
+    /// Không dùng `Box<AssetResolver>` như rustc gợi ý: thêm một lần cấp phát vô
+    /// ích, và lệch với pattern đã có trong chính file này (xem
+    /// `repaint_ms_converted_to_seconds` — closure local rồi truyền `&resolve`).
+    fn no_resolve() -> impl Fn(&als_core::AssetId) -> Option<PathBuf> + Send + Sync {
+        |_: &als_core::AssetId| None
     }
 
     #[test]
