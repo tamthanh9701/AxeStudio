@@ -16,9 +16,9 @@ cd AxeStudio
 pnpm install
 ```
 
-> **Ngay sau lệnh này: `git add pnpm-lock.yaml && git commit`.** CI dùng
-> `--frozen-lockfile`; repo chưa có lockfile vì file này chỉ sinh ra được từ
-> một lần install thật. Quên bước này = mọi job `web` trên CI fail.
+> **Ngay sau lệnh này: `git add pnpm-lock.yaml Cargo.lock && git commit`.**
+> CI dùng `--frozen-lockfile` (pnpm) và resolver kênh rc (specta) — cả hai
+> lockfile đều cần commit sau lần build đầu tiên.
 
 ## 2. Kiểm chứng Rust
 
@@ -32,12 +32,15 @@ PASS: toàn bộ test xanh — gồm property test hash (NFC/NFD tiếng Việt 
 `plan_hash`), golden buffer mixer, no-alloc, migration, contract suite của
 MockProvider, orchestrator end-to-end (cache hit 2 tầng, re-roll seed).
 
-### Điểm kiểm tra đã biết #1 — `specta-typescript`
+### Điểm kiểm tra đã biết #1 — specta kênh prerelease ✅ đã xử lý
 
-Nếu lỗi resolve `specta-typescript` ở `apps/desktop/src-tauri/Cargo.toml`:
-version đó không khớp specta 2 hiện tại. `cargo update -p specta` rồi tra
-[docs.rs/specta-typescript](https://docs.rs) chọn bản tương thích, sửa đúng
-một dòng trong `[dev-dependencies]`.
+`specta` 2.x chỉ có bản `2.0.0-rc.*` trên crates.io; requirement `^2` không
+match prerelease → cargo báo "failed to select a version". Repo đã chuyển
+` specta / tauri-specta / specta-typescript` sang requirement `"2.0.0-rc"`.
+Rủi ro còn lại: API giữa các bản rc có thể trôi (ví dụ chữ ký
+`Builder::invoke_handler`). Nếu lỗi compile xuất hiện quanh `lib.rs` — tra
+README của tauri-specta tại bản rc trong Cargo.lock, hoặc hạ bản:
+`cargo update -p tauri-specta --precise 2.0.0-rc.<n>` rồi build lại.
 
 ### Điểm kiểm tra đã biết #2 — `cpal::Stream` Send
 
@@ -68,9 +71,12 @@ PASS: typecheck sạch; vitest xanh (rules.test.ts). Trong app:
 
 1. Tạo project → bấm **Generate** (MockProvider) → clip xuất hiện với
    **waveform** sau vài giây.
-2. Bấm **▶** → nghe take sine; click ruler/lane → playhead nhảy đúng chỗ.
-3. **Export WAV** → file 24-bit xuất hiện kèm sidecar `.meta.json`.
-4. Đổi backend ở header (mock/cpp/py) — cpp/py sẽ báo chưa sẵn sàng cho tới
+2. Bấm **▶** → nghe take sine; click ruler/lane → playhead nhảy đúng chỗ;
+   nút **Loop** lặp toàn project.
+3. **Import** file audio thật (đường dẫn tuyệt đối, cách nhau bởi `;`) →
+   clip có waveform và nghe được.
+4. **Export WAV** → file 24-bit xuất hiện kèm sidecar `.meta.json`.
+5. Đổi backend ở header (mock/cpp/py) — cpp/py sẽ báo chưa sẵn sàng cho tới
    khi Phase 0 xong; đó là hành vi đúng, không phải lỗi.
 
 ## 5. Sau khi xanh toàn bộ
@@ -84,8 +90,8 @@ Phần kiểm chứng được mà không cần build Rust — đã chạy và P
 
 | Kiểm | Kết quả |
 | --- | --- |
-| `tsc` strict (exactOptionalPropertyTypes, verbatimModuleSyntax) toàn bộ frontend + packages, gồm lớp playback/export mới | PASS |
+| `tsc` strict (exactOptionalPropertyTypes, verbatimModuleSyntax) toàn bộ frontend + packages, gồm lớp playback/export/track-controls | PASS |
 | Prettier `--check` file viết tay (đúng config repo) | PASS |
 | YAML workflow `ci.yml` / `release.yml` parse | PASS |
 | `scripts/collect-bench.mjs` + `bench-perf-budget.mjs` (3 chiều: đủ số pass / vượt budget fail / thiếu report fail) | PASS |
-| `cargo build/test/clippy` | chưa chạy — cần máy thật (bước 2) |
+| `cargo build/test/clippy` | đang chạy trên máy thật — bước 2 |
