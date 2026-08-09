@@ -20,6 +20,7 @@ members = [
 version = "0.0.1"
 edition = "2021"
 rust-version = "1.77"
+authors = ["tamthanh9701 <tamlemai0907@jultee.io.vn>"]
 license = "UNLICENSED" # private cho tới khi chốt quyết định free/paid (plan §15)
 repository = "https://github.com/tamthanh9701/AxeStudio"
 
