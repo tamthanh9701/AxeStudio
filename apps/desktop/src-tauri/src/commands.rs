@@ -1,5 +1,11 @@
 //! Toàn bộ IPC command — khớp docs/contracts/ipc.md.
 //! Mọi lỗi trả về IpcError (code enum đóng); UI map code → tiếng Việt.
+//!
+//! Mỗi command PHẢI có đủ CẢ HAI attribute:
+//!   #[tauri::command]   — để Tauri sinh wrapper IPC
+//!   #[specta::specta]   — để tauri_specta::collect_commands! lấy được kiểu
+//! Thiếu cái thứ hai thì collect_commands! trong lib.rs không compile.
+//! `State<'_, AppState>` được specta bỏ qua, không xuất hiện trong bindings.
 
 use crate::assets_io;
 use crate::player;
@@ -59,14 +65,18 @@ pub struct AssetInfo {
     pub channels: Option<u32>,
 }
 
-impl From<als_project::AssetRecord> for AssetInfo {
-    fn from(a: als_project::AssetRecord) -> Self {
+/// Row của bảng `asset` — als-project chỉ export `AssetRow` (không có
+/// `AssetRecord`). SQLite không có unsigned int nên mọi số ở db đều là i64;
+/// clamp `.max(0)` trước khi cast để giá trị âm (do bug ghi liều) không wrap
+/// thành số khủng làm UI vẽ clip dài vô hạn.
+impl From<als_project::AssetRow> for AssetInfo {
+    fn from(a: als_project::AssetRow) -> Self {
         Self {
-            id: a.id.to_string(),
-            kind: a.kind.as_str().to_owned(),
-            duration_ms: a.duration_ms,
-            sample_rate: a.sample_rate,
-            channels: a.channels,
+            id: a.id,
+            kind: a.kind,
+            duration_ms: a.duration_ms.map(|v| v.max(0) as u64),
+            sample_rate: a.sample_rate.map(|v| v.max(0) as u32),
+            channels: a.channels.map(|v| v.max(0) as u32),
         }
     }
 }
@@ -200,6 +210,7 @@ async fn apply_edit_inner(state: &State<'_, AppState>, cmd: EditCommand) -> CmdR
 // ---------- project ----------
 
 #[tauri::command]
+#[specta::specta]
 pub async fn project_create(
     state: State<'_, AppState>,
     path: String,
@@ -212,6 +223,7 @@ pub async fn project_create(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn project_open(state: State<'_, AppState>, path: String) -> CmdResult<ProjectSnapshot> {
     let project = Project::open(Path::new(&path))?;
     let snapshot = project.snapshot(false);
@@ -220,6 +232,7 @@ pub async fn project_open(state: State<'_, AppState>, path: String) -> CmdResult
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn project_save_as(
     state: State<'_, AppState>,
     path: String,
@@ -258,6 +271,7 @@ fn copy_dir_all(src: &Path, dst: &Path) -> CmdResult<()> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn project_apply_edit(
     state: State<'_, AppState>,
     cmd: EditCommand,
@@ -269,6 +283,7 @@ pub async fn project_apply_edit(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn project_undo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> {
     let mut project_guard = state.project.lock().await;
     let project = project_guard.as_mut().ok_or_else(no_project)?;
@@ -291,6 +306,7 @@ pub async fn project_undo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> 
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn project_redo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> {
     let mut project_guard = state.project.lock().await;
     let project = project_guard.as_mut().ok_or_else(no_project)?;
@@ -312,6 +328,7 @@ pub async fn project_redo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> 
 // ---------- asset ----------
 
 #[tauri::command]
+#[specta::specta]
 pub async fn asset_import(
     state: State<'_, AppState>,
     paths: Vec<String>,
@@ -335,6 +352,7 @@ pub async fn asset_import(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn asset_get(state: State<'_, AppState>, asset_id: String) -> CmdResult<AssetInfo> {
     let guard = state.project.lock().await;
     let project = guard.as_ref().ok_or_else(no_project)?;
@@ -346,6 +364,7 @@ pub async fn asset_get(state: State<'_, AppState>, asset_id: String) -> CmdResul
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn asset_peaks(
     state: State<'_, AppState>,
     asset_id: String,
@@ -383,6 +402,7 @@ pub async fn asset_peaks(
 // ---------- generation ----------
 
 #[tauri::command]
+#[specta::specta]
 pub async fn generate_submit(
     state: State<'_, AppState>,
     clip_id: String,
@@ -397,6 +417,7 @@ pub async fn generate_submit(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn job_cancel(state: State<'_, AppState>, job_id: String) -> CmdResult<CancelOutcome> {
     let orch = state.orchestrator.lock().await.clone();
     let orch = orch.ok_or_else(no_project)?;
@@ -404,6 +425,7 @@ pub async fn job_cancel(state: State<'_, AppState>, job_id: String) -> CmdResult
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn take_list(state: State<'_, AppState>, clip_id: String) -> CmdResult<Vec<TakeInfo>> {
     let guard = state.project.lock().await;
     let project = guard.as_ref().ok_or_else(no_project)?;
@@ -412,6 +434,7 @@ pub async fn take_list(state: State<'_, AppState>, clip_id: String) -> CmdResult
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn take_promote(
     state: State<'_, AppState>,
     clip_id: String,
@@ -430,6 +453,7 @@ pub async fn take_promote(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn take_star(
     state: State<'_, AppState>,
     take_id: String,
@@ -442,6 +466,7 @@ pub async fn take_star(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn take_delete(state: State<'_, AppState>, take_id: String) -> CmdResult<()> {
     let guard = state.project.lock().await;
     let project = guard.as_ref().ok_or_else(no_project)?;
@@ -469,6 +494,7 @@ async fn ensure_engine(state: &State<'_, AppState>) -> CmdResult<()> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn transport_play(state: State<'_, AppState>) -> CmdResult<()> {
     ensure_engine(&state).await?;
     if let Some(e) = state.engine.lock().await.as_mut() {
@@ -479,6 +505,7 @@ pub async fn transport_play(state: State<'_, AppState>) -> CmdResult<()> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn transport_pause(state: State<'_, AppState>) -> CmdResult<()> {
     if let Some(e) = state.engine.lock().await.as_mut() {
         e.pause();
@@ -488,6 +515,7 @@ pub async fn transport_pause(state: State<'_, AppState>) -> CmdResult<()> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn transport_seek(state: State<'_, AppState>, position_ms: u64) -> CmdResult<()> {
     ensure_engine(&state).await?;
     if let Some(e) = state.engine.lock().await.as_mut() {
@@ -497,6 +525,7 @@ pub async fn transport_seek(state: State<'_, AppState>, position_ms: u64) -> Cmd
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn transport_loop(
     state: State<'_, AppState>,
     start_ms: u64,
@@ -511,6 +540,7 @@ pub async fn transport_loop(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn transport_position(state: State<'_, AppState>) -> CmdResult<TransportPosition> {
     let guard = state.engine.lock().await;
     let frames = guard.as_ref().map(|e| e.playhead().load_frames()).unwrap_or(0);
@@ -523,6 +553,7 @@ pub async fn transport_position(state: State<'_, AppState>) -> CmdResult<Transpo
 // ---------- engine ----------
 
 #[tauri::command]
+#[specta::specta]
 pub async fn engine_status(state: State<'_, AppState>) -> CmdResult<EngineStatus> {
     let orch = state.orchestrator.lock().await.clone();
     match orch {
@@ -540,6 +571,7 @@ pub async fn engine_status(state: State<'_, AppState>) -> CmdResult<EngineStatus
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn engine_switch_backend(
     state: State<'_, AppState>,
     provider_id: String,
@@ -553,6 +585,7 @@ pub async fn engine_switch_backend(
 // ---------- export ----------
 
 #[tauri::command]
+#[specta::specta]
 pub async fn export_render(state: State<'_, AppState>, spec: ExportSpec) -> CmdResult<String> {
     let (tracks, layout) = {
         let guard = state.project.lock().await;
