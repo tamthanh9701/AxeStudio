@@ -31,5 +31,6 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
-# Exporter TS của specta — cùng kênh rc với specta (xem workspace Cargo.toml).
-specta-typescript = "2.0.0-rc"
+# Exporter TS của specta — KHÁC dòng version với specta core: specta đi kênh
+# 2.0.0-rc.*, còn specta-typescript đi dãy 0.0.x (mới nhất 0.0.12).
+specta-typescript = "0.0"
