@@ -91,12 +91,10 @@ export function TakeRack() {
                     className="danger"
                     onClick={() =>
                       void ipc.takeDelete(t.id).then(() => {
-                        useStudio
-                          .getState()
-                          .setTakes(
-                            selectedClipId,
-                            takes.filter((x) => x.id !== t.id),
-                          )
+                        useStudio.getState().setTakes(
+                          selectedClipId,
+                          takes.filter((x) => x.id !== t.id),
+                        )
                       })
                     }
                   >
