@@ -10,10 +10,10 @@
 
 use crate::state::AppState;
 use als_assets::AssetStore;
-use als_audio::{db_to_linear, AudioConfig, AudioSource, BufferSource, EngineBuilder};
+use als_audio::{db_to_linear, AudioConfig, BufferSource, EngineBuilder};
 use als_core::{AssetId, ClipSource, ErrorCode, ExportRange, ExportSpec, IpcError, Track};
 use als_media::AudioBuffer;
-use als_project::{Db, Project};
+use als_project::Db;
 use tauri::{Emitter, State};
 
 const SR: u64 = 48_000;
@@ -109,11 +109,17 @@ fn consolidate_track(track: &Track, db: &Db, store: &AssetStore) -> (BufferSourc
             } else {
                 l
             };
-            let (Some(dl), Some(dr)) = (data.get_mut(di), data.get_mut(di + 1)) else {
+            // E0499: `(data.get_mut(di), data.get_mut(di + 1))` mượn `data` khả
+            // biến HAI lần trong cùng một biểu thức tuple — borrow checker từ
+            // chối. Bounds-check MỘT lần rồi index tuần tự: mỗi phép `+=` là
+            // một lượt mượn riêng, kết thúc ngay cuối câu lệnh.
+            // (`want` đã clamp theo `total_frames - start` nên thực tế luôn
+            //  trong biên; giữ guard cho rẻ và an toàn khi sửa công thức sau.)
+            if di + 1 >= data.len() {
                 continue;
-            };
-            *dl += l * gain;
-            *dr += r * gain;
+            }
+            data[di] += l * gain;
+            data[di + 1] += r * gain;
         }
     }
     (BufferSource::from_interleaved(data), warnings)

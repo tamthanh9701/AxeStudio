@@ -30,6 +30,12 @@ als-orchestrator.workspace = true
 als-provider.workspace = true
 als-provider-cpp.workspace = true
 als-provider-py.workspace = true
+# Ghi WAV TRỰC TIẾP trong chính crate này ở hai chỗ:
+#   assets_io::encode_wav_f32 → WAV 32-bit float (asset sau normalize 48k)
+#   player::bounce            → WAV 24-bit PCM (export bản mix cuối)
+# Rust KHÔNG kế thừa dependency: als-audio/als-media có hound cũng không đưa
+# `hound` vào scope ở đây. Thiếu dòng dưới = E0433 ×6.
+hound.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
