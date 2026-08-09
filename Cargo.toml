@@ -68,7 +68,8 @@ reqwest = { version = "0.12", features = ["json"] }
 # Type bridge — specta 2.x hiện chỉ phát hành kênh prerelease (2.0.0-rc.*),
 # nên requirement phải mở kênh rc; resolver tự chọn bộ version tương thích.
 # Cargo.lock khoá bản cụ thể sau lần build đầu — commit lockfile vào repo.
-specta = { version = "2.0.0-rc", features = ["derive"] }
+# Feature "serde_json": impl specta::Type cho serde_json::Value (ProviderOverrides.extra).
+specta = { version = "2.0.0-rc", features = ["derive", "serde_json"] }
 tauri-specta = { version = "2.0.0-rc", features = ["derive", "typescript"] }
 
 tauri = { version = "2", features = [] }

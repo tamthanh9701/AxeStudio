@@ -89,6 +89,6 @@ pub fn render_hash_with_version(
     h.update(b"\x00");
     h.update(model_checksum.as_bytes());
     h.update(b"\x00");
-    h.update(pipeline_version.to_le_bytes());
+    h.update(&pipeline_version.to_le_bytes());
     Ok(RenderHash(h.finalize().to_hex().to_string()))
 }

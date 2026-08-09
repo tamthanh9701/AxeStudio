@@ -23,14 +23,14 @@ fn locate(arr: &Arrangement, clip_id: &ClipId) -> Option<(usize, usize)> {
     })
 }
 
-fn clip_mut(arr: &mut Arrangement, clip_id: &ClipId) -> Option<&mut Clip> {
+fn clip_mut<'a>(arr: &'a mut Arrangement, clip_id: &ClipId) -> Option<&'a mut Clip> {
     arr.tracks
         .iter_mut()
         .flat_map(|t| t.clips.iter_mut())
         .find(|c| &c.id == clip_id)
 }
 
-fn track_mut(arr: &mut Arrangement, track_id: &TrackId) -> Option<&mut Track> {
+fn track_mut<'a>(arr: &'a mut Arrangement, track_id: &TrackId) -> Option<&'a mut Track> {
     arr.tracks.iter_mut().find(|t| &t.id == track_id)
 }
 
