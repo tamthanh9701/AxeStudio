@@ -49,6 +49,28 @@ pub struct PeakView {
     pub pairs: Vec<(f32, f32)>,
 }
 
+/// Metadata asset cho UI (đặt clip import theo độ dài thật).
+#[derive(Debug, Clone, Serialize, specta::Type)]
+pub struct AssetInfo {
+    pub id: String,
+    pub kind: String,
+    pub duration_ms: Option<u64>,
+    pub sample_rate: Option<u32>,
+    pub channels: Option<u32>,
+}
+
+impl From<als_project::AssetRecord> for AssetInfo {
+    fn from(a: als_project::AssetRecord) -> Self {
+        Self {
+            id: a.id.to_string(),
+            kind: a.kind.as_str().to_owned(),
+            duration_ms: a.duration_ms,
+            sample_rate: a.sample_rate,
+            channels: a.channels,
+        }
+    }
+}
+
 // ---------- nội bộ ----------
 
 fn default_providers(assets_root: &Path) -> Vec<Arc<dyn als_provider::RenderProvider>> {
@@ -310,6 +332,17 @@ pub async fn asset_import(
         );
     }
     Ok(ids)
+}
+
+#[tauri::command]
+pub async fn asset_get(state: State<'_, AppState>, asset_id: String) -> CmdResult<AssetInfo> {
+    let guard = state.project.lock().await;
+    let project = guard.as_ref().ok_or_else(no_project)?;
+    let asset = project
+        .db
+        .asset_get(&AssetId::from(asset_id))?
+        .ok_or_else(|| IpcError::new(ErrorCode::AssetNotFound, "asset không tồn tại"))?;
+    Ok(asset.into())
 }
 
 #[tauri::command]
