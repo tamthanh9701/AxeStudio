@@ -33,6 +33,10 @@ pub struct AppState {
     pub engine: Mutex<Option<Engine>>,
     /// Command-level playing flag (transport_position trả về cho UI poll).
     pub playing: AtomicBool,
+    /// Vùng loop hiện tại (start_ms, end_ms) — None = loop tắt. Engine rebuild
+    /// không giữ được transport state, nên player::refresh replay SetLoop từ
+    /// đây (fix C1). Reset về None mỗi khi mở project khác (bootstrap_session).
+    pub loop_region: Mutex<Option<(u64, u64)>>,
 }
 
 impl AppState {
@@ -44,6 +48,7 @@ impl AppState {
             undo: Mutex::new(UndoStack::new()),
             engine: Mutex::new(None),
             playing: AtomicBool::new(false),
+            loop_region: Mutex::new(None),
         }
     }
 

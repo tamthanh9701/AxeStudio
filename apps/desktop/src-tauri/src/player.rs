@@ -14,7 +14,7 @@ use als_audio::{db_to_linear, AudioConfig, AudioSource, BufferSource, EngineBuil
 use als_core::{AssetId, ClipSource, ErrorCode, ExportRange, ExportSpec, IpcError, Track};
 use als_media::AudioBuffer;
 use als_project::{Db, Project};
-use tauri::State;
+use tauri::{Emitter, State};
 
 const SR: u64 = 48_000;
 /// Chặn RAM: 5 phút @48k stereo f32 ≈ 115MB/track. Vượt → cắt, S2 stream thật.
@@ -24,35 +24,55 @@ fn to_frames(ms: u64) -> usize {
     (ms * SR / 1000) as usize
 }
 
-/// Giải mã audio của một clip → (buffer 48k, gain tuyến tính).
-/// Clip GENERATE lấy audio qua take active; clip IMPORT không có take —
-/// lấy thẳng từ ClipSource::Imported.asset.
+/// Giải mã audio của một clip.
+///
+/// - `Ok(Some(..))` — buffer 48k + gain tuyến tính.
+/// - `Ok(None)` — clip hợp lệ nhưng chưa có tiếng (Generated chưa có take
+///   active). Im lặng ở đây là đúng, không phải lỗi.
+/// - `Err(..)` — lỗi THẬT (db/decode/resample). C3: trước đây 4 chỗ `.ok()?`
+///   liên tiếp nuốt sạch mọi lỗi thành "clip im lặng" — không log, không
+///   event, không cách nào debug.
 fn clip_audio(
     clip: &als_core::Clip,
     db: &Db,
     store: &AssetStore,
-) -> Option<(AudioBuffer, f32)> {
+) -> Result<Option<(AudioBuffer, f32)>, String> {
     let asset_id = match &clip.source {
         ClipSource::Imported { asset } => asset.clone(),
         ClipSource::Generated => {
-            let take_id = clip.active_take.as_ref()?;
-            let takes = db.takes_for_clip(clip.id.as_str()).ok()?;
-            let take = takes.iter().find(|t| t.id == take_id.as_str())?;
+            let Some(take_id) = clip.active_take.as_ref() else {
+                return Ok(None);
+            };
+            let takes = db
+                .takes_for_clip(clip.id.as_str())
+                .map_err(|e| format!("đọc take của clip: {e}"))?;
+            let take = takes
+                .iter()
+                .find(|t| t.id == take_id.as_str())
+                .ok_or_else(|| format!("active take {} không có trong db", take_id.as_str()))?;
             AssetId::from(take.asset_id.clone())
         }
     };
-    let asset = db.asset_get(&asset_id).ok()??;
+    let asset = db
+        .asset_get(&asset_id)
+        .map_err(|e| format!("đọc asset {}: {e}", asset_id.as_str()))?
+        .ok_or_else(|| format!("asset {} không có trong db", asset_id.as_str()))?;
     let path = store.abs_path(&asset.rel_path);
-    let buf = als_media::decode::decode_file(&path).ok()?;
-    let buf = match als_media::resample::to_target_rate(&buf) {
-        Ok(b) => b,
-        Err(_) => buf,
-    };
-    Some((buf, db_to_linear(clip.gain_db)))
+    let buf = als_media::decode::decode_file(&path)
+        .map_err(|e| format!("decode {}: {e}", asset.rel_path))?;
+    // C4: KHÔNG được fallback về buffer gốc khi resample lỗi — engine luôn chạy
+    // 48kHz, nên phát thẳng buffer 44.1kHz sẽ nhanh hơn ~8.8% và cao hơn ~1.5
+    // semitone. Im lặng + báo lỗi còn đỡ hại hơn phát sai mà người dùng tưởng
+    // model sinh hỏng.
+    let buf = als_media::resample::to_target_rate(&buf)
+        .map_err(|e| format!("resample {}: {e}", asset.rel_path))?;
+    Ok(Some((buf, db_to_linear(clip.gain_db))))
 }
 
 /// Render một track thành buffer stereo timeline-absolute.
-fn consolidate_track(track: &Track, db: &Db, store: &AssetStore) -> BufferSource {
+/// Trả kèm danh sách cảnh báo: clip nào bị bỏ qua vì lỗi gì (C3 — trước đây
+/// chỉ `continue` âm thầm).
+fn consolidate_track(track: &Track, db: &Db, store: &AssetStore) -> (BufferSource, Vec<String>) {
     let end_ms = track
         .clips
         .iter()
@@ -62,10 +82,16 @@ fn consolidate_track(track: &Track, db: &Db, store: &AssetStore) -> BufferSource
         .min(MAX_CONSOLIDATE_MS);
     let total_frames = to_frames(end_ms).max(1);
     let mut data = vec![0.0f32; total_frames * 2];
+    let mut warnings = Vec::new();
 
     for clip in &track.clips {
-        let Some((buf, gain)) = clip_audio(clip, db, store) else {
-            continue;
+        let (buf, gain) = match clip_audio(clip, db, store) {
+            Ok(Some(v)) => v,
+            Ok(None) => continue,
+            Err(reason) => {
+                warnings.push(format!("clip {}: {reason}", clip.id.as_str()));
+                continue;
+            }
         };
         let ch = buf.channels.max(1) as usize;
         let offset = to_frames(clip.offset_ms).min(buf.frames());
@@ -90,11 +116,16 @@ fn consolidate_track(track: &Track, db: &Db, store: &AssetStore) -> BufferSource
             *dr += r * gain;
         }
     }
-    BufferSource::from_interleaved(data)
+    (BufferSource::from_interleaved(data), warnings)
 }
 
 /// Đọc arrangement hiện tại → sources mới → REBUILD engine. Gọi sau
 /// project_open/create, take_promote, take:ready, edit.
+///
+/// C1: engine mới khởi tạo `Transport::default()` → position = 0, loop tắt.
+/// Vì vậy trước khi thay engine cũ phải đọc playhead, và sau khi dựng engine
+/// mới phải replay `Seek` + `SetLoop` (loop lưu ở `AppState.loop_region`) —
+/// nếu không, mỗi lần chỉnh gain/mute/edit là nhạc nhảy về 0:00 và mất loop.
 pub async fn refresh(state: &State<'_, AppState>) -> Result<(), IpcError> {
     let (tracks, layout) = {
         let guard = state.project.lock().await;
@@ -105,29 +136,53 @@ pub async fn refresh(state: &State<'_, AppState>) -> Result<(), IpcError> {
     };
 
     let was_playing = state.playing.load(std::sync::atomic::Ordering::Relaxed);
+    // Vị trí + loop của engine cũ — sẽ replay vào engine mới (C1).
+    let resume_frames = {
+        let guard = state.engine.lock().await;
+        guard
+            .as_ref()
+            .map(|e| e.playhead().load_frames())
+            .unwrap_or(0)
+    };
+    let loop_region = *state.loop_region.lock().await;
+
     let tracks_c = tracks.clone();
     let layout_c = layout.clone();
-    let mut engine = tokio::task::spawn_blocking(move || -> Result<_, IpcError> {
+    let (mut engine, warnings) = tokio::task::spawn_blocking(move || -> Result<_, IpcError> {
         let store = AssetStore::new(layout_c.assets_dir())
             .map_err(|e| IpcError::new(ErrorCode::Io, e.to_string()))?;
         let db = Db::open(&layout_c.db_path())
             .map_err(|e| IpcError::new(ErrorCode::Io, e.to_string()))?;
         let mut builder = EngineBuilder::new(AudioConfig::default());
+        let mut warnings = Vec::new();
         for track in &tracks_c {
-            builder = builder.with_source(Box::new(consolidate_track(track, &db, &store)));
+            let (src, mut w) = consolidate_track(track, &db, &store);
+            warnings.append(&mut w);
+            builder = builder.with_source(Box::new(src));
         }
-        builder
-            .start()
-            .map_err(|e| {
-                IpcError::new(
-                    ErrorCode::ProviderUnavailable,
-                    format!("không mở được thiết bị audio: {e}"),
-                )
-                .retryable(true)
-            })
+        let engine = builder.start().map_err(|e| {
+            IpcError::new(
+                ErrorCode::ProviderUnavailable,
+                format!("không mở được thiết bị audio: {e}"),
+            )
+            .retryable(true)
+        })?;
+        Ok((engine, warnings))
     })
     .await
     .map_err(|e| IpcError::new(ErrorCode::Internal, format!("player task: {e}")))??;
+
+    // C3: lỗi clip không còn bị nuốt — log từng clip + emit MỘT event tổng hợp
+    // để UI hiện cảnh báo "N clip im lặng do lỗi" (UI subscribe event này sau).
+    if !warnings.is_empty() {
+        for w in &warnings {
+            tracing::warn!("consolidate bỏ qua {}", w);
+        }
+        let _ = state.handle().emit(
+            "clip:audio_error",
+            serde_json::json!({ "count": warnings.len(), "messages": warnings }),
+        );
+    }
 
     // Đẩy lại gain/pan/mute/solo từ arrangement (mixer state không sống qua rebuild).
     for (i, track) in tracks.iter().enumerate() {
@@ -148,6 +203,13 @@ pub async fn refresh(state: &State<'_, AppState>) -> Result<(), IpcError> {
             track: t,
             solo: track.solo,
         });
+    }
+    // C1: replay vị trí phát + vùng loop TRƯỚC khi play lại.
+    if resume_frames > 0 {
+        engine.send_command(als_audio::Command::Seek(resume_frames));
+    }
+    if let Some((start_ms, end_ms)) = loop_region {
+        engine.set_loop(start_ms, end_ms, true);
     }
     if was_playing {
         engine.play();
@@ -182,7 +244,11 @@ pub fn bounce(
     let mut mixer = Mixer::new();
     let mut sources: Vec<Option<Box<dyn AudioSource>>> = Vec::with_capacity(tracks.len());
     for track in tracks {
-        sources.push(Some(Box::new(consolidate_track(track, &db, &store))));
+        let (src, warnings) = consolidate_track(track, &db, &store);
+        for w in &warnings {
+            tracing::warn!("bounce bỏ qua {}", w);
+        }
+        sources.push(Some(Box::new(src)));
         let idx = mixer.add_track().expect("tối đa 32 track");
         let st = &mut mixer.tracks[idx];
         st.set_gain(db_to_linear(track.gain_db));

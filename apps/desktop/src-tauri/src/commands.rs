@@ -118,8 +118,14 @@ async fn bootstrap_session(state: &State<'_, AppState>, project: Project) -> Cmd
     *state.orchestrator.lock().await = Some(handle);
     *state.undo.lock().await = UndoStack::new();
     *state.project.lock().await = Some(project);
+    // Session mới = transport mới: reset playing/loop/engine của project trước
+    // để refresh không replay nhầm vị trí/loop/playing sang project mới (C1/C6).
+    state.playing.store(false, Ordering::Relaxed);
+    *state.loop_region.lock().await = None;
+    *state.engine.lock().await = None;
     // Nạp audio của project vào engine — lỗi ở đây KHÔNG chặn mở project
     // (máy không có thiết bị audio vẫn phải dùng được phần còn lại).
+    // Nếu lỗi, lần bấm ▶ đầu tiên sẽ nạp lại qua ensure_engine → refresh (C2).
     let _ = player::refresh(state).await;
     Ok(())
 }
@@ -476,21 +482,22 @@ pub async fn take_delete(state: State<'_, AppState>, take_id: String) -> CmdResu
 
 // ---------- transport ----------
 
+/// C2: TUYỆT ĐỐI không dựng engine RỖNG (không source) — engine rỗng phát im
+/// lặng, và vì `state.engine` đã là `Some(..)` nên không ai thử nạp lại
+/// sources: ▶ câm vĩnh viễn tới khi có edit/take mới. Có project mà chưa có
+/// engine (refresh lúc bootstrap lỗi, vd. thiết bị audio bận) → chạy lại
+/// player::refresh để nạp đầy đủ sources; lỗi thiết bị được refresh trả nguyên
+/// trạng (retryable) để UI báo và người dùng bấm ▶ thử lại.
 async fn ensure_engine(state: &State<'_, AppState>) -> CmdResult<()> {
-    let mut guard = state.engine.lock().await;
-    if guard.is_none() {
-        match als_audio::EngineBuilder::new(als_audio::AudioConfig::default()).start() {
-            Ok(e) => *guard = Some(e),
-            Err(e) => {
-                return Err(IpcError::new(
-                    ErrorCode::ProviderUnavailable,
-                    format!("không mở được thiết bị audio: {e}"),
-                )
-                .retryable(true))
-            }
-        }
+    let has_engine = state.engine.lock().await.is_some();
+    if has_engine {
+        return Ok(());
     }
-    Ok(())
+    let has_project = state.project.lock().await.is_some();
+    if has_project {
+        return player::refresh(state).await;
+    }
+    Err(no_project())
 }
 
 #[tauri::command]
@@ -536,6 +543,12 @@ pub async fn transport_loop(
     if let Some(e) = state.engine.lock().await.as_mut() {
         e.set_loop(start_ms, end_ms, enabled);
     }
+    // Lưu vào AppState để player::refresh replay sau mỗi lần rebuild (C1).
+    *state.loop_region.lock().await = if enabled {
+        Some((start_ms, end_ms))
+    } else {
+        None
+    };
     Ok(())
 }
 
