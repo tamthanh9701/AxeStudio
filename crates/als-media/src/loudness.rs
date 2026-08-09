@@ -16,12 +16,8 @@ pub fn measure(buf: &AudioBuffer) -> Result<Loudness, MediaError> {
     if buf.channels == 0 || buf.samples.is_empty() {
         return Err(MediaError::Loudness("buffer rỗng".into()));
     }
-    let mut e = EbuR128::new(
-        buf.channels,
-        buf.sample_rate,
-        Mode::I | Mode::TRUE_PEAK,
-    )
-    .map_err(|err| MediaError::Loudness(err.to_string()))?;
+    let mut e = EbuR128::new(buf.channels, buf.sample_rate, Mode::I | Mode::TRUE_PEAK)
+        .map_err(|err| MediaError::Loudness(err.to_string()))?;
     e.add_frames_f32(&buf.samples)
         .map_err(|err| MediaError::Loudness(err.to_string()))?;
 
@@ -74,14 +70,33 @@ mod tests {
 
     #[test]
     fn tone_loudness_in_expected_range() {
-        // Sine 1kHz biên độ 0.5: RMS ≈ -13 dBFS, K-weighted ≈ -16 LUFS, cho phép ±4.
+        // Sine 1 kHz biên độ 0.5, STEREO (hai kênh giống nhau):
+        //   MS mỗi kênh = 0.5²/2 = 0.125        → 10·log10 = -9.03 dB
+        //   BS.1770 CỘNG năng lượng các kênh (L và R hệ số 1.0): 0.25 → -6.02 dB
+        //   LUFS = -0.691 + (-6.02) + gain K-weight tại 1 kHz (≈ +0.70 dB) ≈ -6.01
+        // Đo thực tế: -6.0139 — implementation đúng.
+        // (Bản cũ kỳ vọng ≈ -16 vì tính mono — quên cộng kênh — và RMS nhầm thành
+        // -13 dBFS; tổng sai ~10 dB. Lỗi của TEST, không phải của measure.)
         let l = measure(&tone(0.5, 2.0)).unwrap();
-        assert!((-20.0..=-10.0).contains(&l.lufs), "lufs = {}", l.lufs);
+        assert!((-6.5..=-5.5).contains(&l.lufs), "lufs = {}", l.lufs);
         // True peak ≈ 0.5 → ≈ -6 dBTP, cho phép ±1.5.
         assert!(
             (l.true_peak_db - (-6.02)).abs() < 1.5,
             "tp = {}",
             l.true_peak_db
+        );
+    }
+
+    #[test]
+    fn halving_amplitude_drops_lufs_6db() {
+        // Bất biến tương đối không phụ thuộc constant -0.691 hay gain K-weight:
+        // giảm biên độ một nửa → năng lượng giảm 4 lần → LUFS giảm đúng 6.02 LU.
+        let a = measure(&tone(0.5, 2.0)).unwrap();
+        let b = measure(&tone(0.25, 2.0)).unwrap();
+        assert!(
+            (a.lufs - b.lufs - 6.0206).abs() < 0.1,
+            "delta = {}",
+            a.lufs - b.lufs
         );
     }
 
