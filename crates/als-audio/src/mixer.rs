@@ -102,8 +102,8 @@ impl Mixer {
     /// RT-safe: không cấp phát, không panic. sources thiếu dữ liệu → silence.
     ///
     /// QUAN TRỌNG — track im lặng VẪN phải được kéo: source ở v1 là buffer
-    /// consolidated timeline-absolute, con trỏ của nó chỉ nhúch khi
-    /// `next_frame()` được gọi. Nếu `continue` thẳng khi mute thì sau 10 giây
+    /// consolidated timeline-absolute, con trỏ của nó chỉ nhúc nhích khi
+    /// `next_frame()` được gọi. Nếu `continue` thậng khi mute thì sau 10 giây
     /// mute, con trỏ trễ 10 giây so với transport → bỏ mute là nghe lại đoạn
     /// cũ, lệch nhịp vĩnh viễn. Nên ở đây kéo và bỏ đi (vẫn không cấp phát).
     pub fn render(&mut self, sources: &mut [Option<Box<dyn AudioSource>>], out: &mut [f32]) {
@@ -175,15 +175,21 @@ mod tests {
     use super::*;
     use crate::source::BufferSource;
 
-    /// Source đếm tăng dần để biết con trỏ đã đi tới đâu chỉ bằng giá trị mẫu.
+    /// Bước ramp nhỏ CÓ CHỦ ĐÍCH: master clamp kẹp output về [-1, 1]. Nếu mẫu
+    /// lớn (1.0, 2.0, 3.0...) thì sau khi nhân gain_l ≈ 0.707 vẫn vượt 1.0 và bị
+    /// kẹp → test mất khả năng phân biệt con trỏ đang ở frame nào. Đừng nâng.
+    const RAMP_STEP: f32 = 0.01;
+
+    /// Source đếm tăng dần để biết con trỏ đã đi tới đâu chỉ bằng giá trị mẫu:
+    /// frame thứ n mang giá trị n * RAMP_STEP trên cả hai kênh.
     fn ramp(frames: usize) -> Box<dyn AudioSource> {
         let mut data = Vec::with_capacity(frames * 2);
         for f in 0..frames {
-            let v = (f + 1) as f32;
+            let v = (f + 1) as f32 * RAMP_STEP;
             data.push(v);
             data.push(v);
         }
-        Box::new(BufferSource::from_interleaved(data, 2))
+        Box::new(BufferSource::from_interleaved(data))
     }
 
     /// Regression: track bị mute phải tiêu thụ đúng số frame như track phát,
@@ -199,13 +205,14 @@ mod tests {
         mixer.render(&mut sources, &mut out);
         assert_eq!(out, [0.0; 4], "mute phải im lặng");
 
-        // Bỏ mute: phải nghe frame THỪ 3 (giá trị 3.0), không phải frame 1.
+        // Bỏ mute: phải nghe frame THỨ 3, không phải frame 1.
         mixer.tracks[0].mute = false;
         let mut out2 = [0.0f32; 2]; // 1 frame
         mixer.render(&mut sources, &mut out2);
+        let expected = 3.0 * RAMP_STEP * mixer.tracks[0].gain_l;
         assert!(
-            (out2[0] - 3.0 * mixer.tracks[0].gain_l).abs() < 1e-6,
-            "con trỏ source phải đã đi qua 2 frame bị mute, nhận được {}",
+            (out2[0] - expected).abs() < 1e-6,
+            "con trỏ source phải đã đi qua 2 frame bị mute: mong {expected}, nhận {}",
             out2[0]
         );
     }
@@ -226,20 +233,21 @@ mod tests {
         mixer.tracks[1].solo = false;
         let mut out2 = [0.0f32; 2];
         mixer.render(&mut sources, &mut out2);
-        assert!((out2[0] - 3.0 * mixer.tracks[0].gain_l).abs() < 1e-6);
+        let expected = 3.0 * RAMP_STEP * mixer.tracks[0].gain_l;
+        assert!((out2[0] - expected).abs() < 1e-6);
     }
 
     #[test]
     fn master_clamps_to_unit_range() {
         let mut mixer = Mixer::new();
         let _ = mixer.add_track();
-        let mut sources: Vec<Option<Box<dyn AudioSource>>> =
-            vec![Some(Box::new(BufferSource::from_interleaved(
-                vec![10.0, -10.0],
-                2,
-            )))];
+        let mut sources: Vec<Option<Box<dyn AudioSource>>> = vec![Some(Box::new(
+            BufferSource::from_interleaved(vec![10.0, -10.0]),
+        ))];
         let mut out = [0.0f32; 2];
         mixer.render(&mut sources, &mut out);
-        assert!(out[0] <= 1.0 && out[1] >= -1.0);
+        // Giá trị sau clamp là xác định, nên so chính xác thay vì <= / >=.
+        assert_eq!(out[0], 1.0, "đỉnh dương phải bị kẹp đúng 1.0");
+        assert_eq!(out[1], -1.0, "đỉnh âm phải bị kẹp đúng -1.0");
     }
 }
