@@ -55,16 +55,34 @@ impl AssetStore {
         Ok((id, rel))
     }
 
+    /// Kiểm tra `rel` có đúng hình dạng `<hex>/<hex>/<hex>.<ext>` không.
+    ///
+    /// CẠM BẪY ĐÃ TẮC MỘT LẦN: không được kiểm cả chuỗi bằng
+    /// `is_ascii_hexdigit()`. Extension thật có chữ KHÔNG phải hex digit —
+    /// 'w','v' trong "wav"; 's','p','k','l' trong "alspeak" — nên guard kiểu đó
+    /// sẽ từ chối MỌI file hợp lệ, giả danh lỗi bảo mật.
+    /// Vì vậy: tách ở dấu '.' CUỐI CÙNG, stem chỉ hex + '/', ext chỉ chứ
+    /// chữ thường/số (đủ chặt để không thể có '/', '\\', ':' hay "..").
+    fn rel_path_is_safe(rel: &str) -> bool {
+        let Some((stem, ext)) = rel.rsplit_once('.') else {
+            return false;
+        };
+        let stem_ok = !stem.is_empty() && stem.bytes().all(|b| b.is_ascii_hexdigit() || b == b'/');
+        let ext_ok = !ext.is_empty()
+            && ext.len() <= 16
+            && ext
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
+        // ".." đã bất khả thi khi stem không chứa '.', nhưng giữ lại cho chắc
+        // và để ý định của check này hiển nhiên với người đọc sau.
+        stem_ok && ext_ok && !rel.contains("..")
+    }
+
     /// Ghi tại một rel_path CỐ ĐỊNH — cho artifact derive (peaks, thumbnail)
     /// vốn định vị theo asset gốc, không hash nội dung chính nó.
     /// Ví dụ: peaks của asset `<hex>` nằm tại `<ab>/<cd>/<hex>.alspeak`.
     pub fn put_named(&self, rel: &str, bytes: &[u8]) -> Result<(), StoreError> {
-        // Chặn path traversal: rel chỉ được chứa [0-9a-f/] và một dấu chấm.
-        let ok = rel.bytes().all(|b| {
-            b.is_ascii_hexdigit() || b == b'/' || b == b'.'
-        }) && rel.matches('.').count() == 1
-            && !rel.contains("..");
-        if !ok {
+        if !Self::rel_path_is_safe(rel) {
             return Err(StoreError::BadRelPath(rel.to_owned()));
         }
         let abs = self.abs_path(rel);
@@ -154,6 +172,35 @@ mod tests {
         let rel = AssetStore::rel_path(&audio_id, "alspeak").unwrap();
         store.put_named(&rel, b"peaks-bytes").unwrap();
         assert_eq!(store.get(&rel).unwrap(), b"peaks-bytes");
+    }
+
+    /// Regression: guard từng bắt MỌI byte là hex digit, làm chính các
+    /// extension thật của app bị từ chối — toàn bộ import + peaks chết.
+    /// Mọi extension app dùng phải đi qua được.
+    #[test]
+    fn accepts_real_extensions() {
+        let id = AssetId::from_content_hash(&blake3::hash(b"content"));
+        for ext in ["wav", "alspeak", "flac", "mp3", "json", "opus", "m4a"] {
+            let rel = AssetStore::rel_path(&id, ext).unwrap();
+            assert!(
+                AssetStore::rel_path_is_safe(&rel),
+                "extension .{ext} phải được chấp nhận, rel = {rel}"
+            );
+        }
+    }
+
+    /// Các dạng độc phải bị chặn — test cho chính predicate để không phải
+    /// chạm đĩa, và để khi nới guard ai cũng thấy ranh giới ở đâu.
+    #[test]
+    fn rel_path_safety_boundaries() {
+        assert!(!AssetStore::rel_path_is_safe("../../evil.wav"));
+        assert!(!AssetStore::rel_path_is_safe("noextension"));
+        assert!(!AssetStore::rel_path_is_safe("ab/cd/file.WAV"), "ext hoa");
+        assert!(!AssetStore::rel_path_is_safe("ab/cd/zz.wav"), "stem không hex");
+        assert!(!AssetStore::rel_path_is_safe("ab/cd/ff.wav/../x.wav"));
+        assert!(!AssetStore::rel_path_is_safe("C:/tmp/ff.wav"));
+        assert!(!AssetStore::rel_path_is_safe("ab/cd/ff."), "ext rỗng");
+        assert!(!AssetStore::rel_path_is_safe(".wav"), "stem rỗng");
     }
 
     fn walkdir_count(root: &Path) -> usize {
