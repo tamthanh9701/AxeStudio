@@ -93,7 +93,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("song.aiproj");
         Project::create(&root, "a", "0.0.1").unwrap();
-        let err = Project::create(&root, "b", "0.0.1").unwrap_err();
+        // Db/Project không derive Debug nên không dùng được unwrap_err() —
+        // Result::err() + Option::expect() không có bound Debug.
+        let err = Project::create(&root, "b", "0.0.1")
+            .err()
+            .expect("Project::create phải lỗi AlreadyExists");
         assert!(matches!(err, crate::error::ProjectError::AlreadyExists(_)));
     }
 }

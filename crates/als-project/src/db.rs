@@ -465,7 +465,11 @@ mod tests {
                 .execute("UPDATE schema_version SET version = 999", [])
                 .unwrap();
         }
-        let err = Db::open(&path).unwrap_err();
+        // Db/Project không derive Debug nên không dùng được unwrap_err() —
+        // Result::err() + Option::expect() không có bound Debug.
+        let err = Db::open(&path)
+            .err()
+            .expect("Db::open phải lỗi SchemaTooNew");
         assert!(matches!(err, ProjectError::SchemaTooNew { found: 999, .. }));
     }
 
