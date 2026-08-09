@@ -3,6 +3,12 @@
 //! clippy.toml cấm std::sync::Mutex toàn workspace → mọi khóa ở đây là
 //! tokio::sync::Mutex (async command). AppHandle đi qua OnceLock: set một lần
 //! ở setup, đọc tự do sau đó.
+//!
+//! Ràng buộc cứng: Tauri yêu cầu state `Send + Sync + 'static` (`.manage()` và
+//! mọi `State<'_, AppState>`). Vì thế MỌI field ở đây phải `Send`. Đừng nhét
+//! handle của OS (cpal::Stream, HANDLE, COM pointer...) vào — als_audio::Engine
+//! đã cố tình che stream sau một audio thread riêng để giữ được `Send`, và có
+//! test `engine_handle_is_send` canh điều đó.
 
 use als_audio::Engine;
 use als_core::UndoStack;
@@ -22,8 +28,8 @@ pub struct AppState {
     pub orchestrator: Mutex<Option<OrchestratorHandle>>,
     pub undo: Mutex<UndoStack>,
     /// Engine tạo lazy ở lần play đầu tiên và REBUILD khi sources đổi
-    /// (player::refresh). Nếu cpal::Stream trên một nền tảng nào đó hoá ra
-    /// !Send, chuyển engine sang thread riêng + channel — pattern của S2.
+    /// (player::refresh). Engine là handle Send: cpal::Stream sống trong audio
+    /// thread của als-audio, không nằm ở đây.
     pub engine: Mutex<Option<Engine>>,
     /// Command-level playing flag (transport_position trả về cho UI poll).
     pub playing: AtomicBool,

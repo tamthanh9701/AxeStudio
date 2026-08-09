@@ -15,6 +15,12 @@ tauri-build.workspace = true
 tauri.workspace = true
 tauri-specta.workspace = true
 specta.workspace = true
+# Exporter TS của specta — KHÁC dòng version với specta core: specta đi kênh
+# 2.0.0-rc.*, còn specta-typescript đi dãy 0.0.x (mới nhất 0.0.12).
+# PHẢI ở [dependencies], KHÔNG phải dev: nó được dùng bởi bin target
+# src/bin/export-bindings.rs, mà bin không nhận dev-dependencies (chỉ test/
+# example/bench mới nhận). Để ở dev thì `pnpm bindings:generate` sẽ fail.
+specta-typescript = "0.0"
 als-core.workspace = true
 als-project.workspace = true
 als-assets.workspace = true
@@ -29,8 +35,3 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-
-[dev-dependencies]
-# Exporter TS của specta — KHÁC dòng version với specta core: specta đi kênh
-# 2.0.0-rc.*, còn specta-typescript đi dãy 0.0.x (mới nhất 0.0.12).
-specta-typescript = "0.0"

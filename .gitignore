@@ -12,6 +12,9 @@ node_modules/
 
 # Tauri
 apps/desktop/src-tauri/gen/
+# icons/: build.rs sinh icon.ico placeholder khi chưa có icon thật. Sprint 7 đưa
+# bộ icon thật vào repo thì xoá dòng này (và commit icons/).
+apps/desktop/src-tauri/icons/
 
 # Model weights & vendored builds (KHÔNG commit)
 models/
