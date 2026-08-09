@@ -38,9 +38,26 @@ pub fn db_to_linear(db: f32) -> f32 {
 mod tests {
     use super::*;
 
+    /// CẢNH BÁO cho người sửa test này: -6 dB và "nửa biên độ" KHÔNG phải cùng
+    /// một số. 20·log10(0.5) = -6.020599913, nên:
+    ///   db_to_linear(-6.0206) ≈ 0.5
+    ///   db_to_linear(-6.0)    ≈ 0.501_187_2  (= 10^(-0.3))
+    /// Bản đầu của test này ghép -6.0206 dB với 0.501_187_2 → lệch 1.19e-3,
+    /// vượt ngưỡng 1e-4 và fail. Đó là lỗi của test, không phải của hàm.
     #[test]
     fn db_conversion() {
+        // 0 dB = unity gain.
         assert!((db_to_linear(0.0) - 1.0).abs() < 1e-6);
-        assert!((db_to_linear(-6.0206) - 0.501_187_2).abs() < 1e-4);
+        // Điểm nửa biên độ (fader -6 dB "thật" của tai người).
+        assert!((db_to_linear(-6.0206) - 0.5).abs() < 1e-4);
+        // -6.0 dB tròn — số khác, chốt luôn để không ai ghép lẫn lần nữa.
+        assert!((db_to_linear(-6.0) - 0.501_187_2).abs() < 1e-4);
+        // Fader kéo hết xuống = -inf dB → im hoàn toàn.
+        // IEEE 754: pow(10, -inf) = +0, nên mute qua đường gain là an toàn.
+        assert_eq!(db_to_linear(f32::NEG_INFINITY), 0.0);
+        // Đơn điệu tăng — bắt lỗi đảo dấu hoặc chia sai hệ số trong công thức.
+        assert!(db_to_linear(-12.0) < db_to_linear(-6.0));
+        assert!(db_to_linear(-6.0) < db_to_linear(0.0));
+        assert!(db_to_linear(0.0) < db_to_linear(6.0));
     }
 }
