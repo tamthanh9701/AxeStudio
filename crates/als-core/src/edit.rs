@@ -4,6 +4,11 @@
 //! so với việc viết inverse cho từng command — và không bao giờ sai inverse.
 //! Khi document lớn hơn (nghìn clip, automation dày), viết ADR chuyển sang
 //! inverse-per-command.
+//!
+//! NGUYÊN TẮC BẮT BUỘC Ở FILE NÀY: validate hết rồi mới mutate.
+//! `UndoStack::apply` chỉ push snapshot khi `Ok`, nên nếu một nhánh lỗi xảy ra
+//! SAU khi đã sửa `arr` thì arrangement bị hỏng mà KHÔNG undo được — tức là
+//! mất dữ liệu vĩnh viễn. Mọi `?` phải nằm trước lần ghi đầu tiên.
 
 use crate::document::{Arrangement, Clip, EditCommand, EditResult, Track};
 use crate::error::{ErrorCode, IpcError};
@@ -32,6 +37,10 @@ fn clip_mut<'a>(arr: &'a mut Arrangement, clip_id: &ClipId) -> Option<&'a mut Cl
 
 fn track_mut<'a>(arr: &'a mut Arrangement, track_id: &TrackId) -> Option<&'a mut Track> {
     arr.tracks.iter_mut().find(|t| &t.id == track_id)
+}
+
+fn track_exists(arr: &Arrangement, track_id: &TrackId) -> bool {
+    arr.tracks.iter().any(|t| &t.id == track_id)
 }
 
 /// Clip trên track luôn sort theo start_ms — renderer phụ thuộc vào điều này.
@@ -110,9 +119,16 @@ pub fn apply(arr: &mut Arrangement, cmd: &EditCommand) -> Result<EditResult, Ipc
             start_ms,
         } => {
             let (ti, ci) = locate(arr, clip_id).ok_or_else(|| not_found("clip"))?;
+            // Kiểm tra track đích TRƯẮC khi remove. Nếu remove trước rồi `?`
+            // trả lỗi, clip đã bị lấy ra khỏi arrangement và bị drop luôn — mà
+            // UndoStack::apply chỉ push snapshot khi Ok, nên không undo được:
+            // clip mất vĩnh viễn. Xem "NGUYÊN TẮC BẮT BUỘC" ở đầu file.
+            if !track_exists(arr, to_track) {
+                return Err(not_found("track đích"));
+            }
             let mut clip = arr.tracks[ti].clips.remove(ci);
             clip.start_ms = *start_ms;
-            let target = track_mut(arr, to_track).ok_or_else(|| not_found("track đích"))?;
+            let target = track_mut(arr, to_track).expect("track đích vừa được kiểm tra");
             target.clips.push(clip);
             sort_clips(target);
             Ok(EditResult {
@@ -387,6 +403,36 @@ mod tests {
         .unwrap();
         let starts: Vec<u64> = arr.tracks[0].clips.iter().map(|c| c.start_ms).collect();
         assert_eq!(starts, vec![20_000, 30_000]);
+    }
+
+    /// Regression MẤT DỮ LIỆU: move sang track không tồn tại từng xoá clip thật.
+    /// Clip bị remove khỏi track cũ trước khi lỗi được trả về, và UndoStack
+    /// không giữ snapshot cho edit fail → không có đường lùi.
+    #[test]
+    fn move_to_missing_track_keeps_clip() {
+        let (mut arr, _t, clip) = one_clip_arrangement();
+        let mut stack = UndoStack::new();
+        let ghost_track = TrackId::new();
+        let r = stack.apply(
+            &mut arr,
+            &EditCommand::MoveClip {
+                clip_id: clip.clone(),
+                to_track: ghost_track,
+                start_ms: 5_000,
+            },
+        );
+        assert!(r.is_err());
+        assert_eq!(
+            arr.tracks[0].clips.len(),
+            1,
+            "clip không được biến mất khi edit fail"
+        );
+        assert!(arr.tracks[0].clips[0].id == clip, "phải là đúng clip cũ");
+        assert_eq!(
+            arr.tracks[0].clips[0].start_ms, 0,
+            "arrangement phải nguyên vẹn, không bị sửa một nửa"
+        );
+        assert_eq!(stack.undo_len(), 0);
     }
 
     #[test]
