@@ -6,7 +6,7 @@ Các mục đánh dấu **CẤM** là điều kiện chặn merge, không phải
 
 ---
 
-## 1. Ba luật không được phá 
+## 1. Ba luật không được phá
 
 1. **Contract trước, code sau.** Schema SQLite, `trait RenderProvider`, và bề mặt IPC nằm trong `docs/contracts/`. Muốn đổi contract → mở PR riêng chỉ chứa thay đổi contract + ADR, không kèm code implement.
 2. **Một PR = một ticket.** Không “tranh thủ dọn luôn”. Refactor ngoài phạm vi → PR riêng.
@@ -18,18 +18,18 @@ Các mục đánh dấu **CẤM** là điều kiện chặn merge, không phải
 
 Bảng này là bắt buộc. Thêm dependency nội bộ ngoài bảng → từ chối PR.
 
-| Crate | Được phụ thuộc vào | Vai trò |
-| --- | --- | --- |
-| `als-core` | — (không crate nội bộ nào) | kiểu chung, id, error, canonicalize, hash |
-| `als-audio` | **— (không gì cả, kể cả `als-core`)** | audio engine realtime |
-| `als-project` | `als-core` | SQLite, migration, manifest |
-| `als-assets` | `als-core` | content-addressed store, peaks |
-| `als-media` | `als-core` | decode, resample, loudness |
-| `als-provider` | `als-core` | trait + contract tests + mock |
-| `als-provider-cpp` | `als-core`, `als-provider` | client `ace-server` |
-| `als-provider-py` | `als-core`, `als-provider` | client `acestep-api` |
-| `als-orchestrator` | `als-core`, `als-provider`, `als-project`, `als-assets` | queue, cache, scheduler |
-| `als-desktop` | tất cả | shell Tauri, đăng ký command |
+| Crate              | Được phụ thuộc vào                                      | Vai trò                                   |
+| ------------------ | ------------------------------------------------------- | ----------------------------------------- |
+| `als-core`         | — (không crate nội bộ nào)                              | kiểu chung, id, error, canonicalize, hash |
+| `als-audio`        | **— (không gì cả, kể cả `als-core`)**                   | audio engine realtime                     |
+| `als-project`      | `als-core`                                              | SQLite, migration, manifest               |
+| `als-assets`       | `als-core`                                              | content-addressed store, peaks            |
+| `als-media`        | `als-core`                                              | decode, resample, loudness                |
+| `als-provider`     | `als-core`                                              | trait + contract tests + mock             |
+| `als-provider-cpp` | `als-core`, `als-provider`                              | client `ace-server`                       |
+| `als-provider-py`  | `als-core`, `als-provider`                              | client `acestep-api`                      |
+| `als-orchestrator` | `als-core`, `als-provider`, `als-project`, `als-assets` | queue, cache, scheduler                   |
+| `als-desktop`      | tất cả                                                  | shell Tauri, đăng ký command              |
 
 **Tại sao `als-audio` không được phụ thuộc `als-core`:** một khi nó nhìn thấy `serde`, `String`, `HashMap` của domain, sớm hay muộn cũng có người allocate trong callback. Cắt phụ thuộc là cách rẻ nhất để lỗi đó không xảy ra. Giao tiếp với phần còn lại qua kiểu nguyên thuỷ (`u64`, `f32`, `[f32]`) và struct định nghĩa nội bộ.
 
@@ -59,7 +59,7 @@ Mọi hàm chạy trong callback phải đánh dấu `#[rt_safe]` (attribute tà
 
 ## 4. Bindings TypeScript
 
-`packages/bindings/src/generated.ts` **sinh tự động**. 
+`packages/bindings/src/generated.ts` **sinh tự động**.
 
 - **CẤM** sửa tay file này.
 - **CẤM** khai báo lại kiểu domain ở phía TS (`interface Clip {...}` viết tay → từ chối PR).

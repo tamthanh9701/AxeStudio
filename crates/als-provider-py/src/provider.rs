@@ -170,8 +170,7 @@ impl RenderProvider for PyProvider {
                     // Ước lượng thô: leo dần tới 95%, không bao giờ chạm 100
                     // cho tới khi thật sự xong — progress bar câm là lỗi UX.
                     let est = 60_000f64 + f64::from(input.recipe.duration_s) * 500.0;
-                    let pct = ((started.elapsed().as_millis() as f64 / est) * 95.0)
-                        .min(95.0) as u8;
+                    let pct = ((started.elapsed().as_millis() as f64 / est) * 95.0).min(95.0) as u8;
                     cx.report(pct, ProgressStage::Rendering).await;
                 }
                 TaskStatus::Succeeded => {
@@ -212,7 +211,9 @@ impl RenderProvider for PyProvider {
     async fn understand(&self, _input: UnderstandInput, _cx: JobCtx) -> Result<AudioAnalysis> {
         // acestep-api 1.5 không expose understand endpoint riêng trong API.md —
         // understand là bài của cpp (`ace-understand`) hoặc LM 4B. Trung thực.
-        Err(ProviderError::CapabilityNotSupported(Capability::Understand))
+        Err(ProviderError::CapabilityNotSupported(
+            Capability::Understand,
+        ))
     }
 
     async fn warmup(&self, model: &ModelId, slot: Slot) -> Result<()> {
@@ -245,7 +246,8 @@ mod tests {
 
     #[test]
     fn parse_result_tolerates_shapes() {
-        let (path, codes) = parse_result(r#"{"file": "/out/a.wav", "audio_code_string": "FSQ:1"}"#).unwrap();
+        let (path, codes) =
+            parse_result(r#"{"file": "/out/a.wav", "audio_code_string": "FSQ:1"}"#).unwrap();
         assert_eq!(path, "/out/a.wav");
         assert_eq!(codes.as_deref(), Some("FSQ:1"));
         let (path, _) = parse_result(r#"{"files": ["/out/b.wav"]}"#).unwrap();

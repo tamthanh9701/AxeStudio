@@ -8,7 +8,7 @@ use tokio::sync::oneshot;
 pub enum OrchCommand {
     SubmitGenerate {
         clip_id: String,
-        recipe: GenerationRecipe,
+        recipe: Box<GenerationRecipe>,
         priority: i32,
         resp: oneshot::Sender<Result<JobId>>,
     },

@@ -24,7 +24,5 @@ pub enum OrchEvent {
         cached: bool,
     },
     /// → `peaks:ready` — peaks của asset đã sẵn sàng để UI vẽ waveform.
-    PeaksReady {
-        asset_id: AssetId,
-    },
+    PeaksReady { asset_id: AssetId },
 }

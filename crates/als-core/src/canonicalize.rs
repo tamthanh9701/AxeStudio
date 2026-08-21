@@ -97,8 +97,8 @@ fn write_value(v: &Value, out: &mut String) -> Result<(), CanonicalizeError> {
             let mut first = true;
             // serde_json::Map (không bật preserve_order) là BTreeMap → đã sort.
             for (k, v) in map {
-                let drop = matches!(v, Value::Null)
-                    || matches!(v, Value::String(s) if s.is_empty());
+                let drop =
+                    matches!(v, Value::Null) || matches!(v, Value::String(s) if s.is_empty());
                 if drop {
                     continue;
                 }
@@ -181,7 +181,10 @@ mod tests {
 
     #[test]
     fn integer_and_float_forms_unify() {
-        assert_eq!(canonicalize(&json!(7)).unwrap(), canonicalize(&json!(7.0)).unwrap());
+        assert_eq!(
+            canonicalize(&json!(7)).unwrap(),
+            canonicalize(&json!(7.0)).unwrap()
+        );
     }
 
     #[test]
@@ -213,7 +216,10 @@ mod tests {
 
     #[test]
     fn rejects_non_finite() {
-        assert_eq!(write_f64(f64::NAN, &mut String::new()), Err(CanonicalizeError::NonFiniteNumber));
+        assert_eq!(
+            write_f64(f64::NAN, &mut String::new()),
+            Err(CanonicalizeError::NonFiniteNumber)
+        );
         assert_eq!(
             write_f64(f64::INFINITY, &mut String::new()),
             Err(CanonicalizeError::NonFiniteNumber)
@@ -222,12 +228,18 @@ mod tests {
 
     #[test]
     fn normalize_line_collapses_whitespace() {
-        assert_eq!(normalize_line("  epic \t cinematic\n  orchestral "), "epic cinematic orchestral");
+        assert_eq!(
+            normalize_line("  epic \t cinematic\n  orchestral "),
+            "epic cinematic orchestral"
+        );
     }
 
     #[test]
     fn normalize_block_preserves_line_structure() {
         let input = "[Verse]\r\nTiếng   trống\n\n\n[Chorus]\nVang đêm";
-        assert_eq!(normalize_block(input), "[Verse]\nTiếng trống\n[Chorus]\nVang đêm");
+        assert_eq!(
+            normalize_block(input),
+            "[Verse]\nTiếng trống\n[Chorus]\nVang đêm"
+        );
     }
 }

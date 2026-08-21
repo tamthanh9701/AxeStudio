@@ -68,7 +68,9 @@ ProjectId);
 
 /// Định danh asset theo nội dung (content-addressed): blake3 hex của file.
 /// Cùng nội dung → cùng id → dedupe tự nhiên trong store.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+)]
 #[serde(transparent)]
 pub struct AssetId(pub String);
 
@@ -108,7 +110,9 @@ impl AsRef<str> for AssetId {
 
 /// Định danh provider — chuỗi ổn định, KHÔNG phải uuid.
 /// Nằm trong render_hash/plan_hash nên đổi chuỗi này = vô hiệu toàn bộ cache.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+)]
 #[serde(transparent)]
 pub struct ProviderId(pub String);
 

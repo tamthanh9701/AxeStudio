@@ -36,7 +36,9 @@ pub struct Track {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClipSource {
-    Imported { asset: AssetId },
+    Imported {
+        asset: AssetId,
+    },
     /// Clip sinh bởi engine — audio thật nằm ở take active, không ở đây.
     Generated,
 }

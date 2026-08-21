@@ -88,10 +88,10 @@ PASS: typecheck sạch; vitest xanh (rules.test.ts). Trong app:
 
 Phần kiểm chứng được mà không cần build Rust — đã chạy và PASS:
 
-| Kiểm | Kết quả |
-| --- | --- |
-| `tsc` strict (exactOptionalPropertyTypes, verbatimModuleSyntax) toàn bộ frontend + packages, gồm lớp playback/export/track-controls | PASS |
-| Prettier `--check` file viết tay (đúng config repo) | PASS |
-| YAML workflow `ci.yml` / `release.yml` parse | PASS |
-| `scripts/collect-bench.mjs` + `bench-perf-budget.mjs` (3 chiều: đủ số pass / vượt budget fail / thiếu report fail) | PASS |
-| `cargo build/test/clippy` | đang chạy trên máy thật — bước 2 |
+| Kiểm                                                                                                                                | Kết quả                          |
+| ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `tsc` strict (exactOptionalPropertyTypes, verbatimModuleSyntax) toàn bộ frontend + packages, gồm lớp playback/export/track-controls | PASS                             |
+| Prettier `--check` file viết tay (đúng config repo)                                                                                 | PASS                             |
+| YAML workflow `ci.yml` / `release.yml` parse                                                                                        | PASS                             |
+| `scripts/collect-bench.mjs` + `bench-perf-budget.mjs` (3 chiều: đủ số pass / vượt budget fail / thiếu report fail)                  | PASS                             |
+| `cargo build/test/clippy`                                                                                                           | đang chạy trên máy thật — bước 2 |

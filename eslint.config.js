@@ -4,12 +4,7 @@ import tseslint from "typescript-eslint"
 
 export default tseslint.config(
   {
-    ignores: [
-      "**/dist/**",
-      "**/node_modules/**",
-      "**/target/**",
-      "packages/bindings/src/generated.ts",
-    ],
+    ignores: ["**/dist/**", "**/node_modules/**", "**/target/**", "vendor/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -32,6 +27,16 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+  {
+    // Script build/CI chạy trong Node — cần globals ngoài browser.
+    files: ["scripts/**/*.mjs", "*.config.js", "*.config.ts"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly",
+      },
     },
   },
 )

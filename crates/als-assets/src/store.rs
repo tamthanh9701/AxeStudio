@@ -196,7 +196,10 @@ mod tests {
         assert!(!AssetStore::rel_path_is_safe("../../evil.wav"));
         assert!(!AssetStore::rel_path_is_safe("noextension"));
         assert!(!AssetStore::rel_path_is_safe("ab/cd/file.WAV"), "ext hoa");
-        assert!(!AssetStore::rel_path_is_safe("ab/cd/zz.wav"), "stem không hex");
+        assert!(
+            !AssetStore::rel_path_is_safe("ab/cd/zz.wav"),
+            "stem không hex"
+        );
         assert!(!AssetStore::rel_path_is_safe("ab/cd/ff.wav/../x.wav"));
         assert!(!AssetStore::rel_path_is_safe("C:/tmp/ff.wav"));
         assert!(!AssetStore::rel_path_is_safe("ab/cd/ff."), "ext rỗng");

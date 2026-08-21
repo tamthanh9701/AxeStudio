@@ -16,7 +16,7 @@ use als_core::{
     ExportSpec, GenerationRecipe, IpcError, JobId, ProjectSnapshot, ProviderId, TakeId, TakeInfo,
     UndoStack,
 };
-use als_orchestrator::{OrchestratorHandle, OrchEvent};
+use als_orchestrator::{OrchEvent, OrchestratorHandle};
 use als_project::Project;
 use als_provider::CancelOutcome;
 use serde::Serialize;
@@ -86,7 +86,9 @@ impl From<als_project::AssetRow> for AssetInfo {
 fn default_providers(assets_root: &Path) -> Vec<Arc<dyn als_provider::RenderProvider>> {
     let root = assets_root.to_path_buf();
     let resolver: Arc<als_provider_py::AssetResolver> = Arc::new(move |id: &AssetId| {
-        AssetStore::rel_path(id, "wav").ok().map(|rel| root.join(rel))
+        AssetStore::rel_path(id, "wav")
+            .ok()
+            .map(|rel| root.join(rel))
     });
     vec![
         Arc::new(als_provider::MockProvider::new()),
@@ -556,7 +558,10 @@ pub async fn transport_loop(
 #[specta::specta]
 pub async fn transport_position(state: State<'_, AppState>) -> CmdResult<TransportPosition> {
     let guard = state.engine.lock().await;
-    let frames = guard.as_ref().map(|e| e.playhead().load_frames()).unwrap_or(0);
+    let frames = guard
+        .as_ref()
+        .map(|e| e.playhead().load_frames())
+        .unwrap_or(0);
     Ok(TransportPosition {
         frames,
         playing: state.playing.load(Ordering::Relaxed),

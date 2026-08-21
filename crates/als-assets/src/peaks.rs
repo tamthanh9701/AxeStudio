@@ -50,7 +50,7 @@ pub struct PeakMipmap {
 impl PeakMipmap {
     /// Tính mipmap từ interleaved f32. `samples.len()` phải chia hết cho channels.
     pub fn compute(samples: &[f32], channels: u32, sample_rate: u32) -> Result<Self, PeaksError> {
-        if channels == 0 || samples.len() % channels as usize != 0 {
+        if channels == 0 || !samples.len().is_multiple_of(channels as usize) {
             return Err(PeaksError::Invalid(
                 "samples không chia hết cho channels".into(),
             ));
@@ -132,7 +132,8 @@ impl PeakMipmap {
             });
         }
         let (body, crc_bytes) = bytes.split_at(bytes.len() - 4);
-        let stored_crc = u32::from_le_bytes(crc_bytes.try_into().map_err(|_| PeaksError::Truncated)?);
+        let stored_crc =
+            u32::from_le_bytes(crc_bytes.try_into().map_err(|_| PeaksError::Truncated)?);
         if crc32(body) != stored_crc {
             return Err(PeaksError::BadCrc);
         }
@@ -170,7 +171,11 @@ fn crc32(bytes: &[u8]) -> u32 {
     for (i, e) in table.iter_mut().enumerate() {
         let mut c = i as u32;
         for _ in 0..8 {
-            c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+            c = if c & 1 != 0 {
+                0xEDB8_8320 ^ (c >> 1)
+            } else {
+                c >> 1
+            };
         }
         *e = c;
     }
@@ -197,17 +202,23 @@ impl<'a> Reader<'a> {
     }
     fn u32(&mut self) -> Result<u32, PeaksError> {
         Ok(u32::from_le_bytes(
-            self.take(4)?.try_into().map_err(|_| PeaksError::Truncated)?,
+            self.take(4)?
+                .try_into()
+                .map_err(|_| PeaksError::Truncated)?,
         ))
     }
     fn u64(&mut self) -> Result<u64, PeaksError> {
         Ok(u64::from_le_bytes(
-            self.take(8)?.try_into().map_err(|_| PeaksError::Truncated)?,
+            self.take(8)?
+                .try_into()
+                .map_err(|_| PeaksError::Truncated)?,
         ))
     }
     fn f32(&mut self) -> Result<f32, PeaksError> {
         Ok(f32::from_le_bytes(
-            self.take(4)?.try_into().map_err(|_| PeaksError::Truncated)?,
+            self.take(4)?
+                .try_into()
+                .map_err(|_| PeaksError::Truncated)?,
         ))
     }
 }
@@ -243,7 +254,10 @@ mod tests {
         // Xới tung một byte giữa file.
         let mid = bytes.len() / 2;
         bytes[mid] ^= 0xFF;
-        assert!(matches!(PeakMipmap::decode(&bytes), Err(PeaksError::BadCrc)));
+        assert!(matches!(
+            PeakMipmap::decode(&bytes),
+            Err(PeaksError::BadCrc)
+        ));
         // Cắt dở.
         let half = &bytes[..bytes.len() / 2];
         assert!(matches!(

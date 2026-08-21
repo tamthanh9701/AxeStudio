@@ -1,5 +1,6 @@
 node_modules
 dist
 target
+vendor
 pnpm-lock.yaml
 packages/bindings/src/generated.ts

@@ -102,9 +102,7 @@ impl AcestepApiClient {
         }
         if let Some(code) = w.code {
             if code != 0 {
-                return Err(ProviderError::Worker(format!(
-                    "{endpoint}: code={code}"
-                )));
+                return Err(ProviderError::Worker(format!("{endpoint}: code={code}")));
             }
         }
         w.data

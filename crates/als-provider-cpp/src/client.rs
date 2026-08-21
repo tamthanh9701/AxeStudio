@@ -63,7 +63,9 @@ impl AceServerClient {
             .await
             .map_err(|e| ProviderError::Http(e.to_string()))?;
         if !status.is_success() {
-            return Err(ProviderError::Worker(format!("/lm → HTTP {status}: {body}")));
+            return Err(ProviderError::Worker(format!(
+                "/lm → HTTP {status}: {body}"
+            )));
         }
         serde_json::from_str(&body).map_err(|e| ProviderError::InvalidResponse(e.to_string()))
     }

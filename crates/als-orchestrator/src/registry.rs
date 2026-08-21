@@ -46,7 +46,11 @@ impl Registry {
     }
 
     pub fn list(&self) -> Vec<ProviderId> {
-        let mut v: Vec<_> = self.providers.keys().map(|k| ProviderId(k.clone())).collect();
+        let mut v: Vec<_> = self
+            .providers
+            .keys()
+            .map(|k| ProviderId(k.clone()))
+            .collect();
         v.sort();
         v
     }

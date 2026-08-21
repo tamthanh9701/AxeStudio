@@ -2,7 +2,9 @@
 //! Db mở connection THỨ HAI để assert (WAL: 1 writer + n reader).
 
 use als_assets::AssetStore;
-use als_core::{priority, GenerationRecipe, JobState, ModelTier, ProviderId, SamplingParams, TaskType};
+use als_core::{
+    priority, GenerationRecipe, JobState, ModelTier, ProviderId, SamplingParams, TaskType,
+};
 use als_orchestrator::{spawn, OrchEvent, OrchestratorHandle};
 use als_project::{Db, Project};
 use als_provider::MockProvider;
@@ -107,10 +109,15 @@ async fn generate_fresh_produces_take_asset_peaks() {
         .unwrap()
         .unwrap();
     assert!(fx.assets_root.join(&asset.rel_path).exists());
-    let peak_rel =
-        AssetStore::rel_path(&als_core::AssetId::from(takes[0].asset_id.clone()), "alspeak")
-            .unwrap();
-    assert!(fx.assets_root.join(peak_rel).exists(), "peaks phải được sinh");
+    let peak_rel = AssetStore::rel_path(
+        &als_core::AssetId::from(takes[0].asset_id.clone()),
+        "alspeak",
+    )
+    .unwrap();
+    assert!(
+        fx.assets_root.join(peak_rel).exists(),
+        "peaks phải được sinh"
+    );
     fx.handle.shutdown().await;
 }
 
@@ -123,9 +130,10 @@ async fn same_recipe_same_seed_hits_render_cache() {
         .submit_generate("clip-1".into(), recipe(7), priority::INTERACTIVE)
         .await
         .unwrap();
-    wait_event(&mut rx, |e| {
-        matches!(e, OrchEvent::JobState { job_id, state: JobState::Done, .. } if *job_id == j1)
-    })
+    wait_event(
+        &mut rx,
+        |e| matches!(e, OrchEvent::JobState { job_id, state: JobState::Done, .. } if *job_id == j1),
+    )
     .await;
 
     // Cùng recipe + cùng seed → cache tầng 2 trúng, không chạy worker.
@@ -134,9 +142,10 @@ async fn same_recipe_same_seed_hits_render_cache() {
         .submit_generate("clip-2".into(), recipe(7), priority::INTERACTIVE)
         .await
         .unwrap();
-    let ev = wait_event(&mut rx, |e| {
-        matches!(e, OrchEvent::TakeReady { job_id, cached: true, .. } if *job_id == j2)
-    })
+    let ev = wait_event(
+        &mut rx,
+        |e| matches!(e, OrchEvent::TakeReady { job_id, cached: true, .. } if *job_id == j2),
+    )
     .await;
     match ev {
         OrchEvent::TakeReady { cached, .. } => assert!(cached),
@@ -154,9 +163,10 @@ async fn reroll_seed_hits_plan_cache() {
         .submit_generate("c1".into(), recipe(100), priority::INTERACTIVE)
         .await
         .unwrap();
-    wait_event(&mut rx, |e| {
-        matches!(e, OrchEvent::JobState { job_id, state: JobState::Done, .. } if *job_id == j1)
-    })
+    wait_event(
+        &mut rx,
+        |e| matches!(e, OrchEvent::JobState { job_id, state: JobState::Done, .. } if *job_id == j1),
+    )
     .await;
 
     // Đổi seed → plan_hash giữ nguyên → plan_cache.hits tăng đúng 1.
@@ -165,9 +175,10 @@ async fn reroll_seed_hits_plan_cache() {
         .submit_generate("c1".into(), recipe(200), priority::INTERACTIVE)
         .await
         .unwrap();
-    wait_event(&mut rx, |e| {
-        matches!(e, OrchEvent::JobState { job_id, state: JobState::Done, .. } if *job_id == j2)
-    })
+    wait_event(
+        &mut rx,
+        |e| matches!(e, OrchEvent::JobState { job_id, state: JobState::Done, .. } if *job_id == j2),
+    )
     .await;
 
     let db = Db::open(&fx.db_path).unwrap();
@@ -210,9 +221,10 @@ async fn cancel_queued_job_works() {
     assert!(matches!(outcome, als_provider::CancelOutcome::Cancelled));
 
     // j1 vẫn hoàn thành bình thường.
-    wait_event(&mut rx, |e| {
-        matches!(e, OrchEvent::JobState { job_id, state: JobState::Done, .. } if *job_id == j1)
-    })
+    wait_event(
+        &mut rx,
+        |e| matches!(e, OrchEvent::JobState { job_id, state: JobState::Done, .. } if *job_id == j1),
+    )
     .await;
     let db = Db::open(&fx.db_path).unwrap();
     let row = db.job_by_id(j2.as_str()).unwrap().unwrap();

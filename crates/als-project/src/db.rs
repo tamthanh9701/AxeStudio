@@ -312,15 +312,8 @@ impl Db {
         Ok(())
     }
 
-    pub fn job_update_state(
-        &self,
-        id: &JobId,
-        state: JobState,
-        error: Option<&str>,
-    ) -> Result<()> {
-        let state_str = serde_json::to_string(&state)?
-            .trim_matches('"')
-            .to_string();
+    pub fn job_update_state(&self, id: &JobId, state: JobState, error: Option<&str>) -> Result<()> {
+        let state_str = serde_json::to_string(&state)?.trim_matches('"').to_string();
         self.conn.execute(
             "UPDATE job SET state = ?2, error = ?3, updated_at = ?4 WHERE id = ?1",
             params![id.as_str(), state_str, error, now_unix()],

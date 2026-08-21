@@ -7,6 +7,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/), version theo S
 ## [Unreleased]
 
 ### Added
+
 - Bộ khung monorepo: 9 crate Rust + app Tauri 2 + packages TS (Sprint 1).
 - Contract-first: schema SQLite 001, trait RenderProvider, bề mặt IPC (docs/contracts/ipc.md).
 - Cache 2 tầng plan_hash/render_hash (ADR-003) + property tests.

@@ -84,16 +84,6 @@ pub struct ModelDescriptor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 pub struct Slot(pub u8);
 
-impl Slot {
-    pub fn new(n: u8) -> Result<Self, ()> {
-        if (1..=3).contains(&n) {
-            Ok(Self(n))
-        } else {
-            Err(())
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct PlanInput {
     /// Provider chỉ được đọc phần phi-sampling của recipe.

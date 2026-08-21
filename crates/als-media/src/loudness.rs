@@ -42,10 +42,7 @@ pub fn measure(buf: &AudioBuffer) -> Result<Loudness, MediaError> {
         -144.0
     };
 
-    Ok(Loudness {
-        lufs,
-        true_peak_db,
-    })
+    Ok(Loudness { lufs, true_peak_db })
 }
 
 #[cfg(test)]

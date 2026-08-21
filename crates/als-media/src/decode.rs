@@ -53,9 +53,7 @@ pub fn decode_file(path: &Path) -> Result<AudioBuffer, MediaError> {
     loop {
         let packet = match format.next_packet() {
             Ok(p) => p,
-            Err(SymphoniaError::IoError(e))
-                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
+            Err(SymphoniaError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 break;
             }
             Err(e) => return Err(MediaError::Decode(format!("packet: {e}"))),
@@ -72,9 +70,7 @@ pub fn decode_file(path: &Path) -> Result<AudioBuffer, MediaError> {
             }
             // Gói lẻ hỏng thì bỏ qua — một frame xấu không đáng hủy cả file.
             Err(SymphoniaError::DecodeError(_)) => continue,
-            Err(SymphoniaError::IoError(e))
-                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
+            Err(SymphoniaError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 break;
             }
             Err(e) => return Err(MediaError::Decode(format!("decode: {e}"))),

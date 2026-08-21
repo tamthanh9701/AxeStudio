@@ -27,8 +27,11 @@ fn now_unix() -> i64 {
 }
 
 type PhaseFuture = Pin<
-    Box<dyn std::future::Future<Output = std::result::Result<(PlanOutput, RenderOutput), ProviderError>>
-            + Send>,
+    Box<
+        dyn std::future::Future<
+                Output = std::result::Result<(PlanOutput, RenderOutput), ProviderError>,
+            > + Send,
+    >,
 >;
 
 /// Job đang chạy: metadata để finish_job còn biết đường ghi cache/take.
@@ -60,7 +63,9 @@ async fn run_phases(
     cancel: CancellationToken,
     progress: mpsc::Sender<Progress>,
 ) -> std::result::Result<(PlanOutput, RenderOutput), ProviderError> {
-    let split = provider.capabilities().contains(&Capability::SplitPlanRender);
+    let split = provider
+        .capabilities()
+        .contains(&Capability::SplitPlanRender);
     let plan = if split {
         match plan {
             Some(p) => p,
@@ -133,7 +138,7 @@ impl OrchestratorHandle {
         let (tx, rx) = oneshot::channel();
         self.send(OrchCommand::SubmitGenerate {
             clip_id,
-            recipe,
+            recipe: Box::new(recipe),
             priority: prio,
             resp: tx,
         })?;
@@ -253,7 +258,7 @@ impl Orchestrator {
                 priority: prio,
                 resp,
             } => {
-                let out = self.submit(clip_id, recipe, prio);
+                let out = self.submit(clip_id, *recipe, prio);
                 let _ = resp.send(out);
             }
             OrchCommand::Cancel { job_id, resp } => {
@@ -281,12 +286,7 @@ impl Orchestrator {
         }
     }
 
-    fn submit(
-        &mut self,
-        clip_id: String,
-        recipe: GenerationRecipe,
-        prio: i32,
-    ) -> Result<JobId> {
+    fn submit(&mut self, clip_id: String, recipe: GenerationRecipe, prio: i32) -> Result<JobId> {
         // Validate ở biên — UI có thể gửi bậy, job không được vào queue.
         recipe.validate()?;
         let job_id = JobId::new();
@@ -323,7 +323,10 @@ impl Orchestrator {
             if &cur.job_id == job_id {
                 cur.cancel.cancel();
                 let provider = self.registry.active_provider();
-                let outcome = provider.cancel(job_id).await.unwrap_or(CancelOutcome::TooLate);
+                let outcome = provider
+                    .cancel(job_id)
+                    .await
+                    .unwrap_or(CancelOutcome::TooLate);
                 return Ok(outcome);
             }
         }
@@ -353,7 +356,7 @@ impl Orchestrator {
             let job_id = JobId::from(job.id.clone());
             match self.prepare(&job).await {
                 Ok(Preparation::Started(in_flight)) => {
-                    self.current = Some(in_flight);
+                    self.current = Some(*in_flight);
                 }
                 Ok(Preparation::CacheHitDone) => continue,
                 Err(e) => {
@@ -373,9 +376,9 @@ impl Orchestrator {
         let provider = self.registry.active_provider();
         let cap = Capability::for_task(payload.recipe.task);
         if !provider.capabilities().contains(&cap) {
-            return Err(OrchError::Provider(
-                ProviderError::CapabilityNotSupported(cap),
-            ));
+            return Err(OrchError::Provider(ProviderError::CapabilityNotSupported(
+                cap,
+            )));
         }
         let models = provider.models().await?;
         let model = models
@@ -437,7 +440,7 @@ impl Orchestrator {
             prog_tx,
         ));
         self.progress_rx = Some(prog_rx);
-        Ok(Preparation::Started(InFlight {
+        Ok(Preparation::Started(Box::new(InFlight {
             job_id,
             clip_id: payload.clip_id,
             recipe: payload.recipe,
@@ -446,7 +449,7 @@ impl Orchestrator {
             plan_cache_hit: plan_hit,
             cancel: token,
             fut,
-        }))
+        })))
     }
 
     async fn finish_job(
@@ -486,16 +489,11 @@ impl Orchestrator {
     /// nuốt — nó nằm trong store và tìm lại được bằng render_hash lần sau).
     ///
     /// GIỮ HÀM NÀY SYNC: nó không await gì cả, và bắt nó async với `&self`
-    /// + `&InFlight` sẽ phá tính Send của future run() — rusqlite Connection
+    /// và `&InFlight` sẽ phá tính Send của future run() — rusqlite Connection
     /// (và future trait object trong InFlight) là Send-nhưng-không-Sync.
     /// Decode/loudness blocking vài chục ms trên task này là chấp nhận được ở
     /// v1; nếu profiler kêu, chuyển phần nặng sang spawn_blocking với owned data.
-    fn postprocess(
-        &self,
-        cur: &InFlight,
-        plan: PlanOutput,
-        out: RenderOutput,
-    ) -> Result<TakeId> {
+    fn postprocess(&self, cur: &InFlight, plan: PlanOutput, out: RenderOutput) -> Result<TakeId> {
         // Backfill tầng 1: split provider có codes từ plan(); non-split (py)
         // lấy codes từ response render — re-roll seed lần sau sẽ bỏ qua LM.
         if !cur.plan_cache_hit {
@@ -541,11 +539,9 @@ impl Orchestrator {
             .map(|l| (Some(l.lufs), Some(l.true_peak_db)))
             .unwrap_or((None, None));
         if let Some(buf) = &decoded {
-            if let Ok(mm) = als_assets::peaks::PeakMipmap::compute(
-                &buf.samples,
-                buf.channels,
-                buf.sample_rate,
-            ) {
+            if let Ok(mm) =
+                als_assets::peaks::PeakMipmap::compute(&buf.samples, buf.channels, buf.sample_rate)
+            {
                 // Peaks đặt theo đường dẫn DERIVE từ audio asset id — UI chỉ
                 // cần biết audio asset id là tìm được peaks, không cần bảng phụ.
                 if let Ok(peak_rel) = AssetStore::rel_path(&asset_id, "alspeak") {
@@ -582,6 +578,6 @@ impl Orchestrator {
 }
 
 enum Preparation {
-    Started(InFlight),
+    Started(Box<InFlight>),
     CacheHitDone,
 }

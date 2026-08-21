@@ -3,11 +3,11 @@
 Các script này chạy trên **máy thật có GPU**, không chạy trên CI. Kết quả điền
 vào `docs/phase0/spike-report.md`. Không có số → không mở Sprint 1.
 
-| Script | Spike | Việc |
-| --- | --- | --- |
-| `Bench-Matrix.ps1` | S-03 | Đo warm generation theo ma trận model × duration |
-| `Measure-ColdVram.ps1` | S-04 | Đo cold start + peak VRAM/RAM trong lúc render |
-| `../Model-Fetch.ps1` | — | Tải model HF có resume + verify SHA256 (S7 dùng lại) |
+| Script                 | Spike | Việc                                                 |
+| ---------------------- | ----- | ---------------------------------------------------- |
+| `Bench-Matrix.ps1`     | S-03  | Đo warm generation theo ma trận model × duration     |
+| `Measure-ColdVram.ps1` | S-04  | Đo cold start + peak VRAM/RAM trong lúc render       |
+| `../Model-Fetch.ps1`   | —     | Tải model HF có resume + verify SHA256 (S7 dùng lại) |
 
 ## Chuẩn bị
 
