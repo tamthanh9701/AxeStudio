@@ -6,6 +6,7 @@ vào `docs/phase0/spike-report.md`. Không có số → không mở Sprint 1.
 | Script | Spike | Việc |
 | --- | --- | --- |
 | `Bench-Matrix.ps1` | S-03 | Đo warm generation theo ma trận model × duration |
+| `Measure-ColdVram.ps1` | S-04 | Đo cold start + peak VRAM/RAM trong lúc render |
 | `../Model-Fetch.ps1` | — | Tải model HF có resume + verify SHA256 (S7 dùng lại) |
 
 ## Chuẩn bị
@@ -29,6 +30,12 @@ foreach ($m in @("acestep-v15-turbo", "acestep-v15-sft")) {
   }
 }
 # → in 1 dòng CSV mỗi lần: backend,model,duration,seconds — dán vào spike report.
+```
+
+```powershell
+# Backend cpp (sau khi S-01 build được ace-server): thêm -Backend cpp —
+# BaseUrl tự chuyển sang :8080, script gọi /lm rồi /synth?wav=1.
+./scripts/phase0/Bench-Matrix.ps1 -Backend cpp -Model acestep-v15-turbo -DurationS 30
 ```
 
 ## Kill criteria nhắc lại
