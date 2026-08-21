@@ -8,6 +8,7 @@
 //! `State<'_, AppState>` được specta bỏ qua, không xuất hiện trong bindings.
 
 use crate::assets_io;
+use crate::events;
 use crate::player;
 use crate::state::AppState;
 use als_assets::{AssetStore, PeakMipmap};
@@ -24,6 +25,7 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
+use tauri_specta::Event as _;
 
 pub type CmdResult<T> = Result<T, IpcError>;
 
@@ -45,6 +47,8 @@ pub struct UndoOutcome {
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct TransportPosition {
+    /// specta: u64 bị cấm export — playhead < 2^53 frame trong mọi session.
+    #[specta(type = i32)]
     pub frames: u64,
     pub playing: bool,
 }
@@ -52,6 +56,9 @@ pub struct TransportPosition {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct PeakView {
     pub spp: u32,
+    /// specta: f32 render "number | null" — ép `[number, number][]`
+    /// (min/max peak luôn hữu hạn trong [-1, 1]).
+    #[specta(type = Vec<(i32, i32)>)]
     pub pairs: Vec<(f32, f32)>,
 }
 
@@ -60,6 +67,7 @@ pub struct PeakView {
 pub struct AssetInfo {
     pub id: String,
     pub kind: String,
+    #[specta(type = Option<i32>)]
     pub duration_ms: Option<u64>,
     pub sample_rate: Option<u32>,
     pub channels: Option<u32>,
@@ -151,22 +159,22 @@ fn forward_events(app: tauri::AppHandle, handle: OrchestratorHandle) {
                     error,
                 } => {
                     let _ = app.emit(
-                        "job:state",
-                        serde_json::json!({
-                            "job_id": job_id.to_string(),
-                            "state": state,
-                            "error": error,
-                        }),
+                        events::JobStateEvent::NAME,
+                        events::JobStateEvent {
+                            job_id,
+                            state,
+                            error,
+                        },
                     );
                 }
                 OrchEvent::Progress(p) => {
                     let _ = app.emit(
-                        "job:progress",
-                        serde_json::json!({
-                            "job_id": p.job_id.to_string(),
-                            "percent": p.percent,
-                            "stage": p.stage,
-                        }),
+                        events::JobProgressEvent::NAME,
+                        events::JobProgressEvent {
+                            job_id: p.job_id,
+                            percent: p.percent,
+                            stage: p.stage,
+                        },
                     );
                 }
                 OrchEvent::TakeReady {
@@ -176,13 +184,13 @@ fn forward_events(app: tauri::AppHandle, handle: OrchestratorHandle) {
                     cached,
                 } => {
                     let _ = app.emit(
-                        "take:ready",
-                        serde_json::json!({
-                            "job_id": job_id.to_string(),
-                            "clip_id": clip_id,
-                            "take_id": take_id.to_string(),
-                            "cached": cached,
-                        }),
+                        events::TakeReadyEvent::NAME,
+                        events::TakeReadyEvent {
+                            job_id,
+                            clip_id,
+                            take_id,
+                            cached,
+                        },
                     );
                     // Take mới → playback phải nạp lại để Play nghe được ngay.
                     let st = app.state::<AppState>();
@@ -190,8 +198,8 @@ fn forward_events(app: tauri::AppHandle, handle: OrchestratorHandle) {
                 }
                 OrchEvent::PeaksReady { asset_id } => {
                     let _ = app.emit(
-                        "peaks:ready",
-                        serde_json::json!({ "asset_id": asset_id.to_string() }),
+                        events::PeaksReadyEvent::NAME,
+                        events::PeaksReadyEvent { asset_id },
                     );
                 }
             }
@@ -209,9 +217,10 @@ async fn apply_edit_inner(state: &State<'_, AppState>, cmd: EditCommand) -> CmdR
     let snapshot = project.snapshot(dirty);
     drop(undo);
     drop(project_guard);
-    let _ = state
-        .handle()
-        .emit("project:dirty", serde_json::json!({ "dirty": dirty }));
+    let _ = state.handle().emit(
+        events::ProjectDirtyEvent::NAME,
+        events::ProjectDirtyEvent { dirty },
+    );
     Ok(EditOutcome { edit, snapshot })
 }
 
@@ -304,9 +313,10 @@ pub async fn project_undo(state: State<'_, AppState>) -> CmdResult<UndoOutcome> 
     let snapshot = label.as_ref().map(|_| project.snapshot(dirty));
     drop(undo);
     drop(project_guard);
-    let _ = state
-        .handle()
-        .emit("project:dirty", serde_json::json!({ "dirty": dirty }));
+    let _ = state.handle().emit(
+        events::ProjectDirtyEvent::NAME,
+        events::ProjectDirtyEvent { dirty },
+    );
     if label.is_some() {
         let _ = player::refresh(&state).await;
     }
@@ -525,10 +535,11 @@ pub async fn transport_pause(state: State<'_, AppState>) -> CmdResult<()> {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn transport_seek(state: State<'_, AppState>, position_ms: u64) -> CmdResult<()> {
+pub async fn transport_seek(state: State<'_, AppState>, position_ms: u32) -> CmdResult<()> {
     ensure_engine(&state).await?;
     if let Some(e) = state.engine.lock().await.as_mut() {
-        e.seek_ms(position_ms);
+        // u32 ms (~49 ngày) đủ cho seek; u64 bị Specta cấm export ra TS.
+        e.seek_ms(u64::from(position_ms));
     }
     Ok(())
 }
@@ -537,17 +548,17 @@ pub async fn transport_seek(state: State<'_, AppState>, position_ms: u64) -> Cmd
 #[specta::specta]
 pub async fn transport_loop(
     state: State<'_, AppState>,
-    start_ms: u64,
-    end_ms: u64,
+    start_ms: u32,
+    end_ms: u32,
     enabled: bool,
 ) -> CmdResult<()> {
     ensure_engine(&state).await?;
     if let Some(e) = state.engine.lock().await.as_mut() {
-        e.set_loop(start_ms, end_ms, enabled);
+        e.set_loop(u64::from(start_ms), u64::from(end_ms), enabled);
     }
     // Lưu vào AppState để player::refresh replay sau mỗi lần rebuild (C1).
     *state.loop_region.lock().await = if enabled {
-        Some((start_ms, end_ms))
+        Some((u64::from(start_ms), u64::from(end_ms)))
     } else {
         None
     };

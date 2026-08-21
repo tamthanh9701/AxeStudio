@@ -70,6 +70,8 @@ reqwest = { version = "0.12", features = ["json", "multipart"] }
 # Cargo.lock khoá bản cụ thể sau lần build đầu — commit lockfile vào repo.
 # Feature "serde_json": impl specta::Type cho serde_json::Value (ProviderOverrides.extra).
 specta = { version = "2.0.0-rc", features = ["derive", "serde_json"] }
+# Marker types cho export TS (Unknown → `unknown`) — dùng ở als-core override.
+specta-typescript = "0.0"
 tauri-specta = { version = "2.0.0-rc", features = ["derive", "typescript"] }
 
 tauri = { version = "2", features = [] }

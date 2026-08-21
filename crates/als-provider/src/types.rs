@@ -63,6 +63,8 @@ impl Capability {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Health {
     pub ready: bool,
+    /// specta: u64 bị cấm export — MB luôn < 2^53.
+    #[specta(type = Option<i32>)]
     pub vram_free_mb: Option<u64>,
     pub loaded_models: Vec<ModelId>,
     /// Chi tiết cho trang Diagnostics — không hiển thị ở UI chính.
@@ -76,6 +78,8 @@ pub struct ModelDescriptor {
     /// Checksum file trọng số (blake3 hex). Đi vào render_hash — đổi quant
     /// (Q8_0 → Q4_K_M) đổi checksum → không trả nhầm cache cũ.
     pub checksum: String,
+    /// specta: u64 bị cấm export — MB luôn < 2^53.
+    #[specta(type = Option<i32>)]
     pub vram_estimate_mb: Option<u64>,
     pub warm: bool,
 }

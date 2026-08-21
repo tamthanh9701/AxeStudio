@@ -4,7 +4,14 @@ import tseslint from "typescript-eslint"
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "**/target/**", "vendor/**"],
+    ignores: [
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/target/**",
+      "vendor/**",
+      // File sinh tự động — chứa `as any` trong runtime helper, không lint.
+      "packages/bindings/src/generated.ts",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

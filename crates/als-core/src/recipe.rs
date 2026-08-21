@@ -78,6 +78,9 @@ pub enum InferMethod {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct SamplingParams {
     /// None = engine tự random (`use_random_seed=true` phía ACE-Step).
+    /// specta: u64 bị cấm export — seed chỉ hiển thị ở UI, `number` đủ
+    /// (giá trị > 2^53 sẽ hiển thị xấp xỉ; engine vẫn nhận đủ 64 bit).
+    #[specta(type = Option<f64>)]
     pub seed: Option<u64>,
     pub inference_steps: u32,
     /// Chỉ có tác dụng trên tier base. UI phải ẩn khi model là turbo.
@@ -108,10 +111,12 @@ impl Default for SamplingParams {
 pub struct ProviderOverrides {
     /// `vllm` | `pt` — chỉ có nghĩa với provider py.
     pub lm_backend: Option<String>,
-    /// `0.6B` | `1.7B` | `4B`.
-    pub lm_model: Option<String>,
     #[serde(default)]
+    /// specta: serde_json::Value liệt kê i64/u64 nội bộ bị cấm export —
+    /// UI chỉ đọc qua, export thành `Record<string, unknown>`.
+    #[specta(type = std::collections::BTreeMap<String, specta_typescript::Unknown>)]
     pub extra: BTreeMap<String, serde_json::Value>,
+    pub lm_model: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -136,6 +141,8 @@ pub struct GenerationRecipe {
     /// Audio nguồn (repaint/cover/extract/lego).
     pub source_audio: Option<AssetId>,
     /// (start_ms, end_ms) — bắt buộc khi task = repaint.
+    /// specta: u64 bị cấm export — ms luôn < 2^53 nên `number` là đủ.
+    #[specta(type = Option<(i32, i32)>)]
     pub repaint_range_ms: Option<(u64, u64)>,
     pub sampling: SamplingParams,
     #[serde(default)]
