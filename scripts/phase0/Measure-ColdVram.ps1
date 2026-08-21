@@ -110,6 +110,7 @@ try {
       $vram = [long]((nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | Select-Object -First 1))
       if ($vram -gt $peakVramMb) { $peakVramMb = $vram }
     } catch { Write-Warning "nvidia-smi lỗi, lần lấy mẫu này bỏ qua: $_" }
+    try {
       $p = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
       if ($p) {
         $ram = [long]($p.WorkingSet64 / 1MB)
