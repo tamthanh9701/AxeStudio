@@ -29,26 +29,26 @@ Binary: `ace-lm`, `ace-synth`, `ace-server`, `ace-understand`, `neural-codec`. S
 
 ## Phương án
 
-| # | Phương án | Đánh giá |
-| --- | --- | --- |
-| 1 | Chỉ `acestep.cpp` | Cài đặt gọn nhất. Mất repaint/extract → Phase 2 gần như không làm được |
-| 2 | Chỉ Python | Đủ tính năng. First-run khủng khiếp, khó ship cho người không rành kỹ thuật |
-| 3 | **Hai provider sau một trait** | Phức tạp hơn ở orchestrator, nhưng giữ được cả hai đường |
+| #   | Phương án                      | Đánh giá                                                                    |
+| --- | ------------------------------ | --------------------------------------------------------------------------- |
+| 1   | Chỉ `acestep.cpp`              | Cài đặt gọn nhất. Mất repaint/extract → Phase 2 gần như không làm được      |
+| 2   | Chỉ Python                     | Đủ tính năng. First-run khủng khiếp, khó ship cho người không rành kỹ thuật |
+| 3   | **Hai provider sau một trait** | Phức tạp hơn ở orchestrator, nhưng giữ được cả hai đường                    |
 
 ## Quyết định
 
 Chọn **phương án 3**: định nghĩa `trait RenderProvider` và hiện thực cả hai. `capabilities()` cho biết provider nào làm được gì; UI ẩn thứ không làm được.
 
-Cái **chưa chốt** là backend nào làm *mặc định khi cài đặt*. Đó là quyết định về trải nghiệm first-run, không phải về kỹ thuật.
+Cái **chưa chốt** là backend nào làm _mặc định khi cài đặt_. Đó là quyết định về trải nghiệm first-run, không phải về kỹ thuật.
 
 ### Tiêu chí chốt (điền từ Phase 0)
 
-| Điều kiện quan sát được | Kết luận |
-| --- | --- |
-| `cpp` chậm hơn `python` ≤ 30% | Mặc định `cpp`. Python là tùy chọn nâng cao |
-| `cpp` chậm hơn > 2× | Mặc định Python, kèm installer tự lo runtime |
-| vLLM không chạy native **và** `pt` chậm hơn 2× | Bỏ Python khỏi Phase 1 hoàn toàn |
-| Vulkan build fail hoặc sai output | Tuyên bố "NVIDIA only" ở v1 |
+| Điều kiện quan sát được                        | Kết luận                                     |
+| ---------------------------------------------- | -------------------------------------------- |
+| `cpp` chậm hơn `python` ≤ 30%                  | Mặc định `cpp`. Python là tùy chọn nâng cao  |
+| `cpp` chậm hơn > 2×                            | Mặc định Python, kèm installer tự lo runtime |
+| vLLM không chạy native **và** `pt` chậm hơn 2× | Bỏ Python khỏi Phase 1 hoàn toàn             |
+| Vulkan build fail hoặc sai output              | Tuyên bố "NVIDIA only" ở v1                  |
 
 ## Hệ quả
 

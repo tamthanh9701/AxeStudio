@@ -21,9 +21,21 @@ pub enum Command {
         enabled: bool,
     },
     /// gain LINEAR (đã qua db_to_linear ở control thread).
-    SetTrackGain { track: u8, gain: f32 },
+    SetTrackGain {
+        track: u8,
+        gain: f32,
+    },
     /// -1.0 ..= 1.0
-    SetTrackPan { track: u8, pan: f32 },
-    SetTrackMute { track: u8, mute: bool },
-    SetTrackSolo { track: u8, solo: bool },
+    SetTrackPan {
+        track: u8,
+        pan: f32,
+    },
+    SetTrackMute {
+        track: u8,
+        mute: bool,
+    },
+    SetTrackSolo {
+        track: u8,
+        solo: bool,
+    },
 }

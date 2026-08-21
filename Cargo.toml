@@ -19,7 +19,7 @@ members = [
 [workspace.package]
 version = "0.0.1"
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.82" # Option::is_none_or (als-audio underrun check); CI chạy @stable
 authors = ["tamthanh9701 <tamlemai0907@jultee.io.vn>"]
 license = "UNLICENSED" # private cho tới khi chốt quyết định free/paid (plan §15)
 repository = "https://github.com/tamthanh9701/AxeStudio"
@@ -70,6 +70,8 @@ reqwest = { version = "0.12", features = ["json", "multipart"] }
 # Cargo.lock khoá bản cụ thể sau lần build đầu — commit lockfile vào repo.
 # Feature "serde_json": impl specta::Type cho serde_json::Value (ProviderOverrides.extra).
 specta = { version = "2.0.0-rc", features = ["derive", "serde_json"] }
+# Marker types cho export TS (Unknown → `unknown`) — dùng ở als-core override.
+specta-typescript = "0.0"
 tauri-specta = { version = "2.0.0-rc", features = ["derive", "typescript"] }
 
 tauri = { version = "2", features = [] }

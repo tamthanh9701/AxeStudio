@@ -41,10 +41,7 @@ pub fn to_target_rate(buf: &AudioBuffer) -> Result<AudioBuffer, MediaError> {
     let mut offset = 0;
     while offset < frames {
         let end = (offset + chunk).min(frames);
-        let mut block: Vec<Vec<f32>> = in_ch
-            .iter()
-            .map(|c| c[offset..end].to_vec())
-            .collect();
+        let mut block: Vec<Vec<f32>> = in_ch.iter().map(|c| c[offset..end].to_vec()).collect();
         // Pad chunk cuối bằng zero cho đủ chunk_size, trim theo ratio sau.
         let short = end - offset;
         if short < chunk {

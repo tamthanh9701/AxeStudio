@@ -25,8 +25,11 @@ pub struct Track {
     pub id: TrackId,
     pub kind: TrackKind,
     pub name: String,
+    /// specta: f32 render "number | null" — ép `number`.
+    #[specta(type = i32)]
     pub gain_db: f32,
     /// -1.0 (trái) ..= 1.0 (phải)
+    #[specta(type = i32)]
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
@@ -36,7 +39,9 @@ pub struct Track {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClipSource {
-    Imported { asset: AssetId },
+    Imported {
+        asset: AssetId,
+    },
     /// Clip sinh bởi engine — audio thật nằm ở take active, không ở đây.
     Generated,
 }
@@ -50,12 +55,20 @@ pub struct GenerationInfo {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Clip {
     pub id: ClipId,
+    /// specta: u64 bị cấm export — ms luôn < 2^53 nên `number` là đủ.
+    #[specta(type = i32)]
     pub start_ms: u64,
+    #[specta(type = i32)]
     pub duration_ms: u64,
     /// Offset vào audio nguồn (trim đầu).
+    #[specta(type = i32)]
     pub offset_ms: u64,
+    /// specta: f32 render "number | null" — ép `number` (dB luôn hữu hạn).
+    #[specta(type = i32)]
     pub gain_db: f32,
+    #[specta(type = i32)]
     pub fade_in_ms: u64,
+    #[specta(type = i32)]
     pub fade_out_ms: u64,
     pub source: ClipSource,
     pub generation: Option<GenerationInfo>,
@@ -91,6 +104,8 @@ pub struct TakeInfo {
     pub lufs: Option<f64>,
     pub true_peak_db: Option<f64>,
     pub starred: bool,
+    /// specta: i64 bị cấm export — unix giây fit i32 tới 2038.
+    #[specta(type = i32)]
     pub created_at_unix: i64,
 }
 
@@ -110,31 +125,40 @@ pub enum EditCommand {
     AddClip {
         track_id: TrackId,
         clip_id: ClipId,
+        #[specta(type = i32)]
         start_ms: u64,
+        #[specta(type = i32)]
         duration_ms: u64,
         source: ClipSource,
     },
     MoveClip {
         clip_id: ClipId,
         to_track: TrackId,
+        #[specta(type = i32)]
         start_ms: u64,
     },
     TrimClip {
         clip_id: ClipId,
+        #[specta(type = i32)]
         start_ms: u64,
+        #[specta(type = i32)]
         duration_ms: u64,
+        #[specta(type = i32)]
         offset_ms: u64,
     },
     SplitClip {
         clip_id: ClipId,
+        #[specta(type = i32)]
         at_ms: u64,
     },
     SetTrackGain {
         track_id: TrackId,
+        #[specta(type = i32)]
         gain_db: f32,
     },
     SetTrackPan {
         track_id: TrackId,
+        #[specta(type = i32)]
         pan: f32,
     },
     SetTrackMute {

@@ -64,15 +64,15 @@ scripts/               bench, model-fetch, release
 
 ## Lộ trình
 
-| Phase | Tuần | Nội dung | Bàn giao |
-| --- | --- | --- | --- |
-| **0** | W1–W2 | Spike kỹ thuật, đo số thật | Spike report + chốt backend |
-| **1** | W3–W16 | MVP — Local Generative Studio | `.msi` ký số: generate → export |
-| **2** | W17–W26 | Controlled editing (repaint, stems, understand) | Beta công khai |
-| **3** | W27–W34 | LoRA library + training | Bản 1.0 |
-| **4** | TBD | Vocal synth provider | Phụ thuộc engine bên thứ ba |
+| Phase | Tuần    | Nội dung                                        | Bàn giao                        |
+| ----- | ------- | ----------------------------------------------- | ------------------------------- |
+| **0** | W1–W2   | Spike kỹ thuật, đo số thật                      | Spike report + chốt backend     |
+| **1** | W3–W16  | MVP — Local Generative Studio                   | `.msi` ký số: generate → export |
+| **2** | W17–W26 | Controlled editing (repaint, stems, understand) | Beta công khai                  |
+| **3** | W27–W34 | LoRA library + training                         | Bản 1.0                         |
+| **4** | TBD     | Vocal synth provider                            | Phụ thuộc engine bên thứ ba     |
 
-**Không bắt đầu Phase 1 khi Phase 0 chưa có số.** Toàn bộ mô hình UX phụ thuộc đúng hai con số: *cold start* và *warm inference*. Xem [`docs/phase0/`](docs/phase0/).
+**Không bắt đầu Phase 1 khi Phase 0 chưa có số.** Toàn bộ mô hình UX phụ thuộc đúng hai con số: _cold start_ và _warm inference_. Xem [`docs/phase0/`](docs/phase0/).
 
 ## Bắt đầu
 
@@ -104,16 +104,16 @@ pnpm bindings:check   # fail nếu TS types lệch với Rust
 
 Đây là **điều kiện merge**, không phải mục tiêu tham khảo.
 
-| Chỉ số | Ngân sách |
-| --- | --- |
-| Timeline scroll/zoom | ≥ 60fps với 24 track / 200 clip |
-| Audio callback | < 30% ngân sách ở buffer 512 @ 48kHz (≈3.5ms) |
-| Xrun | 0 trong 30 phút phát liên tục |
-| Cold start → UI sẵn sàng | < 3s |
-| Mở project 50 clip | < 1.5s |
-| Cache hit → nghe được | < 200ms |
-| Re-roll seed (plan hit) | ≤ 40% thời gian sinh đầy đủ |
-| Peaks cho 3 phút audio | < 800ms |
+| Chỉ số                   | Ngân sách                                     |
+| ------------------------ | --------------------------------------------- |
+| Timeline scroll/zoom     | ≥ 60fps với 24 track / 200 clip               |
+| Audio callback           | < 30% ngân sách ở buffer 512 @ 48kHz (≈3.5ms) |
+| Xrun                     | 0 trong 30 phút phát liên tục                 |
+| Cold start → UI sẵn sàng | < 3s                                          |
+| Mở project 50 clip       | < 1.5s                                        |
+| Cache hit → nghe được    | < 200ms                                       |
+| Re-roll seed (plan hit)  | ≤ 40% thời gian sinh đầy đủ                   |
+| Peaks cho 3 phút audio   | < 800ms                                       |
 
 Chi tiết: [`docs/perf-budget.md`](docs/perf-budget.md).
 
@@ -123,6 +123,6 @@ Chi tiết: [`docs/perf-budget.md`](docs/perf-budget.md).
 
 ## Giấy phép
 
-Chưa chốt. Xem quyết định treo #4 trong build plan. Cho đến khi có file `LICENSE`, mặc định là *all rights reserved*.
+Chưa chốt. Xem quyết định treo #4 trong build plan. Cho đến khi có file `LICENSE`, mặc định là _all rights reserved_.
 
 ACE-Step 1.5 và acestep.cpp là MIT — AxeStudio gọi chúng qua process riêng, không link tĩnh.

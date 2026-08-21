@@ -57,6 +57,14 @@ impl AppState {
     }
 
     pub fn handle(&self) -> &AppHandle {
-        self.app.get().expect("AppHandle được set ở setup trước mọi command")
+        self.app
+            .get()
+            .expect("AppHandle được set ở setup trước mọi command")
+    }
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
     }
 }

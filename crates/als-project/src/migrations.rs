@@ -17,7 +17,9 @@ pub(crate) fn current_version(conn: &Connection) -> Result<u32> {
     if !exists {
         return Ok(0);
     }
-    let v: u32 = conn.query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))?;
+    let v: u32 = conn.query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+        r.get(0)
+    })?;
     Ok(v)
 }
 
@@ -39,7 +41,10 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
         }
     }
     if current == 0 {
-        conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [SCHEMA_VERSION])?;
+        conn.execute(
+            "INSERT INTO schema_version (version) VALUES (?1)",
+            [SCHEMA_VERSION],
+        )?;
     } else {
         conn.execute("UPDATE schema_version SET version = ?1", [SCHEMA_VERSION])?;
     }

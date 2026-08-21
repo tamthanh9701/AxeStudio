@@ -34,7 +34,10 @@ pub fn build_release_payload(
 
     // thinking=true chỉ có nghĩa cho text2music/lego/complete; bị bỏ qua cho
     // cover/repaint/extract (docs API.md). Gửi đúng ngữ nghĩa để log đọc được.
-    let thinking = matches!(r.task, TaskType::Text2Music | TaskType::Lego | TaskType::Complete);
+    let thinking = matches!(
+        r.task,
+        TaskType::Text2Music | TaskType::Lego | TaskType::Complete
+    );
 
     let mut p = serde_json::json!({
         "task_type": r.task,
@@ -127,10 +130,7 @@ pub fn build_release_payload(
     }
     // repaint: API dùng giây, recipe dùng ms.
     if let Some((start_ms, end_ms)) = r.repaint_range_ms {
-        obj.insert(
-            "repainting_start".into(),
-            (start_ms as f64 / 1000.0).into(),
-        );
+        obj.insert("repainting_start".into(), (start_ms as f64 / 1000.0).into());
         obj.insert("repainting_end".into(), (end_ms as f64 / 1000.0).into());
     }
 

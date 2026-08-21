@@ -8,6 +8,8 @@ export default tseslint.config(
       "**/dist/**",
       "**/node_modules/**",
       "**/target/**",
+      "vendor/**",
+      // File sinh tự động — chứa `as any` trong runtime helper, không lint.
       "packages/bindings/src/generated.ts",
     ],
   },
@@ -32,6 +34,16 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+  {
+    // Script build/CI chạy trong Node — cần globals ngoài browser.
+    files: ["scripts/**/*.mjs", "*.config.js", "*.config.ts"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly",
+      },
     },
   },
 )

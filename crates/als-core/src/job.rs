@@ -38,7 +38,10 @@ pub enum JobState {
 
 impl JobState {
     pub fn is_terminal(self) -> bool {
-        matches!(self, JobState::Done | JobState::Failed | JobState::Cancelled)
+        matches!(
+            self,
+            JobState::Done | JobState::Failed | JobState::Cancelled
+        )
     }
 }
 
@@ -48,6 +51,8 @@ pub struct EngineStatus {
     pub backend: ProviderId,
     pub ready: bool,
     pub warm_models: Vec<String>,
+    /// specta: u64 bị cấm export — MB luôn < 2^53.
+    #[specta(type = Option<i32>)]
     pub vram_free_mb: Option<u64>,
     pub queue_depth: u32,
 }
@@ -65,7 +70,12 @@ pub enum ExportFormat {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExportRange {
     Project,
-    Loop { start_ms: u64, end_ms: u64 },
+    Loop {
+        #[specta(type = i32)]
+        start_ms: u64,
+        #[specta(type = i32)]
+        end_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]

@@ -83,11 +83,15 @@ function main() {
   }
 
   fs.writeFileSync(out, JSON.stringify(report, null, 2) + "\n")
-  console.log(`cargo bench parse được ${parsed} dòng; ghi ${Object.keys(report).length} chỉ số → ${out}`)
+  console.log(
+    `cargo bench parse được ${parsed} dòng; ghi ${Object.keys(report).length} chỉ số → ${out}`,
+  )
   for (const [k, v] of Object.entries(report)) console.log(`  ${k}: ${v}`)
 
   if (parsed === 0 && !extra) {
-    console.error("Không parse được dòng bench nào và không có --extra — kiểm tra lại lệnh cargo bench.")
+    console.error(
+      "Không parse được dòng bench nào và không có --extra — kiểm tra lại lệnh cargo bench.",
+    )
     process.exit(1)
   }
 }

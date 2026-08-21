@@ -54,9 +54,16 @@ fn ctx(cancel: CancellationToken) -> (JobCtx, mpsc::Receiver<Progress>) {
 
 async fn first_model(p: &dyn RenderProvider) -> crate::types::ModelId {
     let models = p.models().await.expect("models() phải Ok khi health.ready");
-    assert!(!models.is_empty(), "models() rỗng — provider không có model nào?");
+    assert!(
+        !models.is_empty(),
+        "models() rỗng — provider không có model nào?"
+    );
     for m in &models {
-        assert!(!m.checksum.is_empty(), "model {} thiếu checksum (đi vào render_hash)", m.id);
+        assert!(
+            !m.checksum.is_empty(),
+            "model {} thiếu checksum (đi vào render_hash)",
+            m.id
+        );
     }
     models[0].id.clone()
 }
@@ -108,7 +115,14 @@ pub async fn check_plan_render_roundtrip(p: &dyn RenderProvider) {
 
     let (cx, _rx) = ctx(CancellationToken::new());
     let out = p
-        .render(RenderInput { recipe, plan, model }, cx)
+        .render(
+            RenderInput {
+                recipe,
+                plan,
+                model,
+            },
+            cx,
+        )
         .await
         .expect("render() thất bại");
     assert!(!out.audio.bytes.is_empty(), "render() trả audio rỗng");
@@ -187,7 +201,10 @@ pub async fn check_understand_if_supported(p: &dyn RenderProvider) {
         )
         .await
         .expect("understand() thất bại dù tuyên bố capability");
-    assert!(!analysis.caption.is_empty(), "understand() trả caption rỗng");
+    assert!(
+        !analysis.caption.is_empty(),
+        "understand() trả caption rỗng"
+    );
 }
 
 /// Chạy toàn bộ suite. Thứ tự có chủ đích: check rẻ trước, check đắt sau.

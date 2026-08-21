@@ -1,7 +1,7 @@
 //! Transport: play/pause/seek/loop. Chỉ sống trong audio callback — mọi thay
 //! đổi từ ngoài đi qua Command. Sample-accurate: seek tính bằng frame, không ms.
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Transport {
     pub playing: bool,
     /// Vị trí hiện tại theo frame, trên timeline project.
@@ -9,18 +9,6 @@ pub struct Transport {
     pub loop_start_frames: u64,
     pub loop_end_frames: u64,
     pub looping: bool,
-}
-
-impl Default for Transport {
-    fn default() -> Self {
-        Self {
-            playing: false,
-            position_frames: 0,
-            loop_start_frames: 0,
-            loop_end_frames: 0,
-            looping: false,
-        }
-    }
 }
 
 impl Transport {
@@ -82,7 +70,10 @@ mod tests {
         });
         t.position_frames = 1990;
         t.advance(20); // vượt 10 frame qua mốc 2000
-        assert_eq!(t.position_frames, 1010, "phần dư phải được giữ lại sau wrap");
+        assert_eq!(
+            t.position_frames, 1010,
+            "phần dư phải được giữ lại sau wrap"
+        );
     }
 
     #[test]

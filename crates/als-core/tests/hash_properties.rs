@@ -81,7 +81,10 @@ fn change_prompt_changes_both() {
     b.prompt = "lofi chill, rain, vinyl crackle".into();
 
     let p = provider();
-    assert_ne!(plan_hash(&a, &p, "m").unwrap(), plan_hash(&b, &p, "m").unwrap());
+    assert_ne!(
+        plan_hash(&a, &p, "m").unwrap(),
+        plan_hash(&b, &p, "m").unwrap()
+    );
     assert_ne!(
         render_hash(&a, &p, "m", "ck").unwrap(),
         render_hash(&b, &p, "m", "ck").unwrap()

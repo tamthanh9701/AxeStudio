@@ -27,7 +27,9 @@ export class TimelineRenderer {
       canvas,
       antialias: true,
       backgroundAlpha: 0,
-      resizeTo: canvas.parentElement ?? undefined,
+      // exactOptionalPropertyTypes cấm truyền `undefined` tường minh vào
+      // optional prop — chỉ set resizeTo khi parent tồn tại.
+      ...(canvas.parentElement ? { resizeTo: canvas.parentElement } : {}),
     })
     this.app = app
   }

@@ -1,0 +1,11 @@
+# Chuẩn hoá dòng dòng giữa các máy: repo lưu LF, checkout ra LF everywhere.
+# Lý do: rustfmt.toml đặt newline_style = "Unix" — runner Windows có
+# core.autocrlf=true sẽ biến file thành CRLF khi checkout và cargo fmt --check fail.
+* text=auto eol=lf
+
+# Binary — không convert.
+*.png -text
+*.ico -text
+*.wav -text
+*.mp3 -text
+*.flac -text

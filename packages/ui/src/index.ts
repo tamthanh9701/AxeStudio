@@ -30,8 +30,7 @@ export const spacing = {
 } as const
 
 export const typography = {
-  fontFamily:
-    '"Inter", "Segoe UI", system-ui, -apple-system, sans-serif',
+  fontFamily: '"Inter", "Segoe UI", system-ui, -apple-system, sans-serif',
   monoFamily: '"JetBrains Mono", "Cascadia Code", Consolas, monospace',
   sizeSm: 12,
   sizeMd: 14,

@@ -241,9 +241,10 @@ mod tests {
     fn master_clamps_to_unit_range() {
         let mut mixer = Mixer::new();
         let _ = mixer.add_track();
-        let mut sources: Vec<Option<Box<dyn AudioSource>>> = vec![Some(Box::new(
-            BufferSource::from_interleaved(vec![10.0, -10.0]),
-        ))];
+        let mut sources: Vec<Option<Box<dyn AudioSource>>> =
+            vec![Some(Box::new(BufferSource::from_interleaved(vec![
+                10.0, -10.0,
+            ])))];
         let mut out = [0.0f32; 2];
         mixer.render(&mut sources, &mut out);
         // Giá trị sau clamp là xác định, nên so chính xác thay vì <= / >=.

@@ -373,7 +373,14 @@ mod tests {
             },
         )
         .is_err());
-        assert!(apply(&mut arr, &EditCommand::SplitClip { clip_id: clip, at_ms: 0 }).is_err());
+        assert!(apply(
+            &mut arr,
+            &EditCommand::SplitClip {
+                clip_id: clip,
+                at_ms: 0
+            }
+        )
+        .is_err());
     }
 
     #[test]

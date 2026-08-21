@@ -244,8 +244,8 @@ pub fn bounce(
 
     let store = AssetStore::new(layout.assets_dir())
         .map_err(|e| IpcError::new(ErrorCode::Io, e.to_string()))?;
-    let db = Db::open(&layout.db_path())
-        .map_err(|e| IpcError::new(ErrorCode::Io, e.to_string()))?;
+    let db =
+        Db::open(&layout.db_path()).map_err(|e| IpcError::new(ErrorCode::Io, e.to_string()))?;
 
     let mut mixer = Mixer::new();
     let mut sources: Vec<Option<Box<dyn AudioSource>>> = Vec::with_capacity(tracks.len());

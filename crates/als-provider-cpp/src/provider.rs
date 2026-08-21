@@ -240,7 +240,9 @@ mod tests {
         // acestep.cpp không có repaint/lego/extract/complete (ADR-001).
         let p = CppProvider::new("http://127.0.0.1:8080");
         assert!(!p.capabilities().contains(&Capability::Repaint));
-        assert!(!p.capabilities().contains(&Capability::for_task(TaskType::Extract)));
+        assert!(!p
+            .capabilities()
+            .contains(&Capability::for_task(TaskType::Extract)));
         assert!(p.capabilities().contains(&Capability::Text2Music));
         assert!(p.capabilities().contains(&Capability::SplitPlanRender));
     }
