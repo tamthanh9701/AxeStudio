@@ -24,11 +24,7 @@ impl BufferSource {
         // Làm tròn xuống số frame chẵn kênh — dữ liệu lẻ là bug phía caller,
         // ở đây chọn im lặng cắt bớt thay vì panic trong RT path.
         let frames = data.len() / 2;
-        Self {
-            data,
-            pos: 0,
-        }
-        .with_len(frames)
+        Self { data, pos: 0 }.with_len(frames)
     }
 
     fn with_len(mut self, frames: usize) -> Self {

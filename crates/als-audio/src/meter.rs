@@ -57,8 +57,12 @@ impl Meters {
         let n = (frames.max(1)) as f32;
         self.inner.peak_l.store(pl.to_bits(), Ordering::Release);
         self.inner.peak_r.store(pr.to_bits(), Ordering::Release);
-        self.inner.rms_l.store((sl / n).sqrt().to_bits(), Ordering::Release);
-        self.inner.rms_r.store((sr / n).sqrt().to_bits(), Ordering::Release);
+        self.inner
+            .rms_l
+            .store((sl / n).sqrt().to_bits(), Ordering::Release);
+        self.inner
+            .rms_r
+            .store((sr / n).sqrt().to_bits(), Ordering::Release);
     }
 
     /// UI thread: đọc trong rAF.
