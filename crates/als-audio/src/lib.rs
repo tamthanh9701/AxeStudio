@@ -19,6 +19,7 @@ pub mod playhead;
 pub mod rt_guard;
 pub mod source;
 pub mod transport;
+pub mod xrun;
 
 pub use command::Command;
 pub use engine::{AudioConfig, AudioError, Engine, EngineBuilder};
@@ -26,6 +27,7 @@ pub use meter::{MeterReading, Meters};
 pub use mixer::{Mixer, TrackState};
 pub use playhead::Playhead;
 pub use source::{AudioSource, BufferSource};
+pub use xrun::XrunCounter;
 
 /// Đổi dB → linear. Mixer chỉ làm việc với gain linear để golden test đơn giản;
 /// chuyển đổi xảy ra ở biên command (control thread), không trong callback.

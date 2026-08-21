@@ -24,6 +24,7 @@ use crate::mixer::Mixer;
 use crate::playhead::Playhead;
 use crate::source::AudioSource;
 use crate::transport::Transport;
+use crate::xrun::XrunCounter;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::mpsc;
 use thiserror::Error;
@@ -84,6 +85,7 @@ pub struct Engine {
     command_tx: rtrb::Producer<Command>,
     playhead: Playhead,
     meters: Meters,
+    xruns: XrunCounter,
     config: AudioConfig,
     /// Báo audio thread dừng để stream được drop ở đúng thread đã tạo nó.
     shutdown_tx: Option<mpsc::Sender<()>>,
@@ -98,6 +100,7 @@ fn build_stream(
     mut rx: rtrb::Consumer<Command>,
     ph: Playhead,
     mt: Meters,
+    xr: XrunCounter,
 ) -> Result<cpal::Stream, AudioError> {
     let host = cpal::default_host();
     let device = host
@@ -117,9 +120,11 @@ fn build_stream(
         let _ = mixer.add_track();
     }
     let mut transport = Transport::default();
-    // Đếm xrun: cpal báo lỗi qua callback riêng; underrun phía ta tự đếm
-    // khi source thiếu dữ liệu (S2 sẽ nối counter này vào Diagnostics).
+    // Xrun/underrun đếm vào `xr`: cpal error callback + underrun sau render
+    // (định nghĩa underrun xem trong callback). Spike S-08 đọc counter này.
 
+    // Clone riêng cho error callback — data callback bên dưới đã move `xr`.
+    let xr_err = xr.clone();
     let stream = device
         .build_output_stream(
             &stream_config,
@@ -157,6 +162,16 @@ fn build_stream(
                         *s = 0.0;
                     }
                 }
+                // Underrun phía ta: đang phát nhưng MỌI source đều cạn →
+                // silence nghe được. Đếm là xrun, không panic (AGENTS.md §3).
+                if transport.playing
+                    && !sources.is_empty()
+                    && sources
+                        .iter()
+                        .all(|s| s.as_ref().is_none_or(|x| x.is_finished()))
+                {
+                    xr.bump();
+                }
 
                 // 3. Cập nhật atomics về phía UI + xử lý loop wrap.
                 mt.update(out);
@@ -175,9 +190,10 @@ fn build_stream(
                 #[cfg(debug_assertions)]
                 crate::rt_guard::exit_rt_context();
             },
-            |_err| {
+            move |_err| {
                 // xrun / device error — không log trong callback (I/O!).
-                // S2: đếm vào atomic, Diagnostics đọc sau.
+                // Chỉ đếm vào atomic; Diagnostics/spike S-08 đọc sau.
+                xr_err.bump();
             },
             None,
         )
@@ -196,6 +212,8 @@ impl Engine {
         let meters = Meters::new();
         let ph = playhead.clone();
         let mt = meters.clone();
+        let xruns = XrunCounter::new();
+        let xr = xruns.clone();
 
         // Kết quả mở device phải quay về control thread: người dùng cần thấy
         // lỗi "không có thiết bị output" ngay, không phải im lặng mất tiếng.
@@ -205,7 +223,7 @@ impl Engine {
         let thread = std::thread::Builder::new()
             .name("als-audio".to_owned())
             .spawn(move || {
-                match build_stream(config, sources, command_rx, ph, mt) {
+                match build_stream(config, sources, command_rx, ph, mt, xr) {
                     Ok(stream) => {
                         if ready_tx.send(Ok(())).is_err() {
                             // Control thread bỏ đi giữa đường → dừng luôn.
@@ -231,7 +249,9 @@ impl Engine {
             }
             Err(_) => {
                 let _ = thread.join();
-                return Err(AudioError::Cpal("audio thread chết khi khởi tạo".to_owned()));
+                return Err(AudioError::Cpal(
+                    "audio thread chết khi khởi tạo".to_owned(),
+                ));
             }
         }
 
@@ -239,6 +259,7 @@ impl Engine {
             command_tx,
             playhead,
             meters,
+            xruns,
             config,
             shutdown_tx: Some(shutdown_tx),
             thread: Some(thread),
@@ -286,6 +307,10 @@ impl Engine {
     }
     pub fn meters(&self) -> Meters {
         self.meters.clone()
+    }
+    /// Bộ đếm xrun/underrun — spike S-08 và Diagnostics đọc định kỳ.
+    pub fn xruns(&self) -> XrunCounter {
+        self.xruns.clone()
     }
 }
 

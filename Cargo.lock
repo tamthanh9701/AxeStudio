@@ -67,6 +67,7 @@ name = "als-audio"
 version = "0.0.1"
 dependencies = [
  "cpal",
+ "hound",
  "rtrb",
  "thiserror 2.0.20",
 ]
