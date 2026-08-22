@@ -18,16 +18,16 @@
 
 | Backend | Build được? | Binary chạy? | Ghi chú |
 | ------- | ----------- | ------------ | ------- |
-| CUDA    |             |              |         |
-| Vulkan  |             |              |         |
+| CUDA    | ✅ (CMake 3.31 + Ninja, nvcc 13.3, 183/183 target) | ✅ `ace-server.exe` — `/props` 200, `/understand` 200, `/lm`+`/synth?wav=1` trả WAV RIFF | Log: `docs/phase0/logs/s01-cuda.txt`. Submodule pin `acestep.vst3@b04bf8a` (ggml@4d74a9a8). Lưu ý runtime: cần `cublas64_13.dll`/`cublasLt64_13.dll` (CUDA bin/x64) + shim `cudart_hybrid64.dll` (copy của cudart64_13) cạnh exe |
+| Vulkan  | ❌ — chưa đo được trên máy này: Vulkan SDK installer (winget/LunarG) cần UAC elevation và bị từ chối/hết hạn 3 lần; bản zip LunarG thực chất là EXE | — | Chưa phải kết luận kỹ thuật về code — là giới hạn môi trường đo. Cần máy/cài SDK rồi chạy lại trước khi tuyên bố "NVIDIA only" |
 
 ## S-02 — Python ACE-Step 1.5 native Windows
 
 | Mục                            | Kết quả |
 | ------------------------------ | ------- |
-| `uv sync` thành công           |         |
-| `lm_backend=vllm` native       | ✅ / ❌ |
-| `lm_backend=pt` thời gian plan |         |
+| `uv sync` thành công           | ✅ (uv 0.12.5, Python 3.12.10 native Windows)                                                                                                          |
+| `lm_backend=vllm` native       | ❌ — server log: "vLLM backend is unavailable on Windows because Triton is not installed or is incompatible. Falling back to the PyTorch backend."     |
+| `lm_backend=pt` thời gian plan | LM phase (log server, load→offload trừ DiT): 28.9 / 19.0 / 13.5 s — median ≈ 19 s. Total-wall cả job (script bấm): 44.9 / 32.8 / 34.9 s — median 34.9 s |
 
 ## S-03 — Benchmark ma trận
 
@@ -35,14 +35,16 @@ Thời gian sinh (giây), warm model:
 
 |             | cpp CUDA | cpp Vulkan | python pt | python vllm |
 | ----------- | -------- | ---------- | --------- | ----------- |
-| turbo, 30s  |          |            |           |             |
-| turbo, 120s |          |            |           |             |
-| turbo, 240s |          |            |           |             |
-| sft, 30s    |          |            |           |             |
-| sft, 120s   |          |            |           |             |
-| sft, 240s   |          |            |           |             |
+| turbo, 30s  |          |            | 44.6 / 18.4 | ❌ vllm không có trên Windows — server tự fallback pt (xem S-02) |
+| turbo, 120s |          |            | 127.4 / 48.8 | ❌ (fallback pt) |
+| turbo, 240s |          |            | 48.4 / 36.3 | ❌ (fallback pt) |
+| sft, 30s    |          |            | 18.4 / 20.7 | ❌ (fallback pt) |
+| sft, 120s   |          |            | 36.4 / 28.4 | ❌ (fallback pt) |
+| sft, 240s   |          |            | 38.5 / 54.8 | ❌ (fallback pt) |
 
-## S-04 — Cold start / VRAM
+Ghi chú phương sai: pha LM của py có phương sai lớn (LM chunk sinh token
+5Hz, thời gian không tỉ lệ với duration audio) — cả hai số được ghi nguyên
+trạng, không làm tròn lên (issue #2).
 
 | Backend     | Cold start (s) | Warm gen 120s (s) | Peak VRAM turbo | Peak VRAM sft | RAM host đỉnh |
 | ----------- | -------------- | ----------------- | --------------- | ------------- | ------------- |
