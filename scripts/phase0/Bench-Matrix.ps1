@@ -19,6 +19,10 @@ param(
   [Parameter(Mandatory)][string]$Model,
   [Parameter(Mandatory)][ValidateSet(30, 120, 240)] [int]$DurationS,
   [string]$BaseUrl = $(if ($Backend -eq "cpp") { "http://127.0.0.1:8080" } else { "http://127.0.0.1:8001" }),
+  # acestep-api yêu cầu auth: body `ai_token` hoặc Authorization header (auth.py).
+  [string]$ApiKey = "dev-local",
+  # "" = để server dùng mặc định của nó; "pt"/"vllm" ép backend pha LM (S-02).
+  [string]$LMBackend = "",
   [int]$TimeoutMin = 20
 )
 $ErrorActionPreference = "Stop"
@@ -32,22 +36,37 @@ $body = @{
   audio_duration  = $DurationS
   audio_format    = "wav"
   inference_steps = $steps
-  use_random_seed = $true
   batch_size      = 1
+  ai_token        = $ApiKey
 } | ConvertTo-Json
+if ($LMBackend) {
+  $bodyObj = $body | ConvertFrom-Json
+  $bodyObj | Add-Member -NotePropertyName lm_backend -NotePropertyValue $LMBackend
+  $body = $bodyObj | ConvertTo-Json
+}
 
 if ($Backend -eq "cpp") {
-  # Stopwatch bấm từ TRƯỚC /lm đến khi nhận xong WAV — tổng wall của cả 2 pha,
-  # tương đương cách nhánh py tính từ release_task đến kết quả.
+  # S-01 xác nhận contract thật của ace-server (src/request.cpp):
+  #   caption (không phải prompt), duration (giây, không phải audio_duration),
+  #   seed (số, không phải use_random_seed); KHÔNG có task_type/model/audio_format
+  #   (mỗi process 1 model). Response /lm trả `audio_codes` — khớp client.rs.
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
-  $plan = Invoke-RestMethod -Method Post -Uri "$BaseUrl/lm" -Body $body -ContentType "application/json"
+  $cppBody = @{
+    caption         = "benchmark: cinematic orchestral, strings, taiko"
+    lyrics          = "[Instrumental]"
+    duration        = $DurationS
+    inference_steps = $steps
+    batch_size      = 1
+    seed            = Get-Random -Maximum 2147483647
+  } | ConvertTo-Json
+  $plan = Invoke-RestMethod -Method Post -Uri "$BaseUrl/lm" -Body $cppBody -ContentType "application/json"
   if (-not $plan.audio_codes) { Write-Error "/lm không trả audio_codes: $($plan | ConvertTo-Json -Depth 4)" }
-  $synthBody = $body | ConvertFrom-Json
-  # Tên field `audio_codes` theo contract client.rs; ace-server đặt tên khác → sửa ĐÚNG CHỖ NÀY.
-  $synthBody | Add-Member -NotePropertyName audio_codes -NotePropertyValue $plan.audio_codes
+  # /synth nhận lại cùng body + audio_codes từ pha LM.
+  $synthObj = $cppBody | ConvertFrom-Json
+  $synthObj | Add-Member -NotePropertyName audio_codes -NotePropertyValue $plan.audio_codes
   $resp = Invoke-WebRequest -Method Post -Uri "$BaseUrl/synth?wav=1" `
-    -Body ($synthBody | ConvertTo-Json -Depth 5) -ContentType "application/json"
-  if (-not $resp.IsSuccessStatusCode) { Write-Error "/synth → HTTP $($resp.StatusCode)" }
+    -Body ($synthObj | ConvertTo-Json) -ContentType "application/json"
+  if ($resp.StatusCode -ge 400) { Write-Error "/synth → HTTP $($resp.StatusCode)" }
   $riff = [System.Text.Encoding]::ASCII.GetString($resp.Content[0..3])
   if ($riff -ne "RIFF") { Write-Error "/synth trả về không phải WAV RIFF: '$riff'" }
   $sw.Stop()
@@ -64,7 +83,7 @@ do {
   Start-Sleep -Seconds 2
   if ($sw.Elapsed.TotalMinutes -gt $TimeoutMin) { Write-Error "timeout ${TimeoutMin}min chờ $taskId" }
   $q = (Invoke-RestMethod -Method Post -Uri "$BaseUrl/query_result" `
-      -Body (@{ task_id_list = @($taskId) } | ConvertTo-Json) -ContentType "application/json").data[0]
+      -Body (@{ task_id_list = @($taskId); ai_token = $ApiKey } | ConvertTo-Json) -ContentType "application/json").data[0]
 } while ($q.status -eq 0)
 $sw.Stop()
 

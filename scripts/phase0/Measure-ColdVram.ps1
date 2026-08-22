@@ -28,6 +28,8 @@ param(
   [string[]]$ArgList = @(),
   [string]$WorkDir,
   [string]$BaseUrl = $(if ($Backend -eq "cpp") { "http://127.0.0.1:8080" } else { "http://127.0.0.1:8001" }),
+  # acestep-api yêu cầu auth: body `ai_token` (auth.py).
+  [string]$ApiKey = "dev-local",
   [int]$DurationS = 120,
   [int]$TimeoutMin = 20
 )
@@ -77,6 +79,7 @@ try {
     inference_steps = $steps
     use_random_seed = $true
     batch_size      = 1
+    ai_token        = $ApiKey
   } | ConvertTo-Json
 
   $genJob = Start-ThreadJob -ArgumentList $Backend, $BaseUrl, $body {
@@ -89,7 +92,7 @@ try {
       do {
         Start-Sleep -Seconds 2
         $q = (Invoke-RestMethod -Method Post -Uri "$url/query_result" `
-            -Body (@{ task_id_list = @($taskId) } | ConvertTo-Json) -ContentType "application/json").data[0]
+            -Body (@{ task_id_list = @($taskId); ai_token = "dev-local" } | ConvertTo-Json) -ContentType "application/json").data[0]
       } while ($q.status -eq 0)
       if ($q.status -ne 1) { throw "task failed: $($q.error)" }
     } else {
