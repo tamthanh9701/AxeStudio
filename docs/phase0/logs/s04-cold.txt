@@ -1,0 +1,8 @@
+     | backend tho t s?m khi kh?i d?ng (exit 1) - stderr: Unknown option:
+     | --lm,models/acestep-5Hz-lm-0.6B-Q8_0.gguf,--embedding,models/Qwen3-Embedding-0.6B-Q8_0.gguf,--dit,models/acestep-v15-turbo-Q8_0.gguf,--vae,models/vae-BF16.gguf,--port,8080 Usage: C:\tmp\AxeStudio\vendor\acestep-cpp\build\ace-server.exe [options]  LM (enables /lm + /understand):   --lm <gguf>             Qwen3 LM GGUF file   --max-seq <N>           KV cache size (default: 8192)  Synth (enables /synth, all three required):   --embedding <gguf>      Text encoder GGUF file   --dit <gguf>            DiT GGUF file   --vae <gguf>            VAE GGUF file  LoRA:   --lora <path>           LoRA safetensors file or directory   --lora-scale <float>    LoRA scaling factor (default: 1.0)  VAE tiling (memory control):   --vae-chunk <N>         Latent frames per tile (default: 256)   --vae-overlap <N>       Overlap frames per side (default: 64)  Output:   --mp3-bitrate <kbps>    MP3 bitrate (default: 128)  Server:   --host <addr>           Listen address (default: 127.0.0.1)   --port <N>              Listen port (default: 8080)   --max-batch <N>         LM/synth batch limit (default: 1)   --sleep <N>             Unload models after N sec. (default: 0 = off)  Debug:   --no-fsm                Disable FSM constrained decoding   --no-fa                 Disable flash attention   --no-batch-cfg          Split CFG into two N=1 forwards   --clamp-fp16            Clamp hidden states to FP16 range
+  "error": "LM generation failed"
+}
+cold start (cpp/acestep-v15-turbo): 5.1s
+cpp,acestep-v15-turbo,5.1,7767,1484
+cold start (cpp/acestep-v15-sft): 5.1s
+cpp,acestep-v15-sft,5.1,7781,1407
