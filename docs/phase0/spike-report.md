@@ -67,8 +67,13 @@ trạng, không làm tròn lên (issue #2).
 | ----------- | -------------- | ----------------- | --------------- | ------------- | ------------- |
 | cpp CUDA    | 5.1 (/props — model nạp lazy theo request đầu) | ≈260 (S-03, LM-0.6B) | 7767 MB | 7781 MB | 1484 / 1407 MB |
 | cpp Vulkan  | ❌ | ❌ | ❌ | ❌ | ❌ |
-| python pt   | (đang đo — bổ sung) | | | | |
+| python pt   | 39.4 (/v1/models — weights lazy-load theo job đầu) | turbo: hoàn thành trong window; sft: 36.4 / 28.4 (S-03) | 7985 MB | 7958 MB | ⚠️ 31 MB — đo nhầm `uv` wrapper thay vì con python, không đại diện |
 | python vllm | ❌ — không có native Windows | — | — | — | — |
+
+Ghi chú py: lần đo sft thứ hai bị nhiễm (process con `python` sống sót sau
+khi kill `uv` cha, port 8001 còn listener → cold=0 giả). Cold start boot
+sequence giống hệt giữa turbo/sft nên 39.4 s đại diện cho cả hai. Peak VRAM
+sft 7958 MB lấy từ đúng window render 120s sft của lần nhiễm (hợp lệ).
 
 Ghi chú cpp: "cold start" chỉ tính đến `/props` 200; weights nạp lazy khi
 request đầu → thời gian nhận job thật = cold start + lần gen đầu (~30–60 s
@@ -117,8 +122,6 @@ VAE tiled decode treo vĩnh viễn. Scheduler (WS-D) phải thiết kế theo m�
 | 4   | /                   | /     | /    | /     |
 | 5   | /                   | /     | /    | /     |
 
-**Kết luận:**
-
 ## S-08 — Rust audio prototype
 
 | Buffer | xrun trong 30 phút | Latency đo được |
@@ -131,15 +134,15 @@ VAE tiled decode treo vĩnh viễn. Scheduler (WS-D) phải thiết kế theo m�
 
 | Điều kiện                               | Kích hoạt? | Hệ quả bắt buộc                                                  |
 | --------------------------------------- | ---------- | ---------------------------------------------------------------- |
-| Warm gen 120s > 30s trên GPU mục tiêu   |            | Bỏ UX "như nhạc cụ" → render queue + notification                |
-| Cold start > 60s                        |            | Warm model khi mở project + màn "Engine warming" có tiến độ thật |
-| vLLM không native **và** pt chậm hơn 2× |            | cpp là backend duy nhất v1                                       |
-| Vulkan build fail / sai output          |            | "NVIDIA only" ở v1                                               |
-| Rust audio xrun ở buffer 512            |            | Buffer mặc định 1024 hoặc xem lại streaming                      |
-| extract tệ hơn Demucs rõ rệt            |            | Demucs làm provider riêng ở Phase 2                              |
+| Warm gen 120s > 30s trên GPU mục tiêu   | ✅ KÍCH HOẠT — py pt turbo 48.8–127.4s, cpp 259.5–259.6s; chỉ py-sft sát ngưỡng (28.4s) | Bỏ UX "như nhạc cụ" → render queue + notification                |
+| Cold start > 60s                        | ❌ KHÔNG theo health (cpp 5.1s, py 39.4s); first-gen thật còn phụ thuộc lazy-load + model size | Vẫn nên warm-on-open, không bắt buộc                             |
+| vLLM không native **và** pt chậm hơn 2× | ❌ KHÔNG — vLLM không native là đúng, nhưng pt NHANH HƠN cpp trên GPU 8GB chứ không chậm hơn | Python sống sót qua Phase 0, là ứng viên mặc định                |
+| Vulkan build fail / sai output          | ⚠️ CHƯA ĐÁNH GIÁ ĐƯỢC — SDK không cài nổi trên máy đo (UAC từ chối 3 lần); đây là giới hạn môi trường, KHÔNG phải kết luận kỹ thuật về ace.cpp | Chạy lại trên máy có SDK rồi mới tuyên bố "NVIDIA only"           |
+| Rust audio xrun ở buffer 512            | (S-08 — đang chờ cửa sổ máy yên tĩnh) | Buffer mặc định 1024 hoặc xem lại streaming                      |
+| extract tệ hơn Demucs rõ rệt            | (S-07 — chờ chấm mù 2 phiên) | Demucs làm provider riêng ở Phase 2                              |
 
 ## Kết luận Phase 0
 
-- **Backend mặc định:**
-- **ADR-001 chuyển sang:** Accepted / Rejected
-- **Ngày chốt:**
+- **Backend mặc định:** Python `acestep-api` (`lm_backend=pt`) — nhanh hơn cpp trên GPU 8GB ở 11/12 ô; giữ đủ 6 task_type cho Phase 2; hot-swap same-slot dùng được. `ace.cpp` giữ làm provider thứ hai (máy ≥12GB VRAM / đóng gói không Python), đánh giá lại khi Vulkan đo được
+- **ADR-001 chuyển sang:** **Accepted** — phương án 3 (hai provider sau một trait) + mặc định Python; chi tiết trong `docs/adr/ADR-001-backend-selection.md`
+- **Ngày chốt:** 2026-08-22

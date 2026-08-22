@@ -1,7 +1,7 @@
 # ADR-001 — Chọn backend suy luận mặc định
 
-- **Trạng thái:** Proposed
-- **Ngày:** chưa — chốt vào cuối Phase 0
+- **Trạng thái:** Accepted (Phase 0 chốt ngày 2026-08-22)
+- **Ngày:** 2026-08-22
 - **Quyết định bởi:** số liệu trong `docs/phase0/spike-report.md`, không bởi ưa thích
 
 ## Bối cảnh
@@ -39,16 +39,39 @@ Binary: `ace-lm`, `ace-synth`, `ace-server`, `ace-understand`, `neural-codec`. S
 
 Chọn **phương án 3**: định nghĩa `trait RenderProvider` và hiện thực cả hai. `capabilities()` cho biết provider nào làm được gì; UI ẩn thứ không làm được.
 
-Cái **chưa chốt** là backend nào làm _mặc định khi cài đặt_. Đó là quyết định về trải nghiệm first-run, không phải về kỹ thuật.
+Backend mặc định khi cài đặt đã chốt bằng số đo Phase 0 — xem "Quyết định
+mặc định" bên dưới.
 
-### Tiêu chí chốt (điền từ Phase 0)
+### Tiêu chí chốt — kết quả Phase 0 (máy đo: RTX 3070 8GB, driver 596.49, Win11 build 26200)
 
-| Điều kiện quan sát được                        | Kết luận                                     |
+| Điều kiện quan sát được                        | Kết quả đo (LM-0.6B công bằng cả hai bên)      |
 | ---------------------------------------------- | -------------------------------------------- |
-| `cpp` chậm hơn `python` ≤ 30%                  | Mặc định `cpp`. Python là tùy chọn nâng cao  |
-| `cpp` chậm hơn > 2×                            | Mặc định Python, kèm installer tự lo runtime |
-| vLLM không chạy native **và** `pt` chậm hơn 2× | Bỏ Python khỏi Phase 1 hoàn toàn             |
-| Vulkan build fail hoặc sai output              | Tuyên bố "NVIDIA only" ở v1                  |
+| `cpp` chậm hơn `python` ≤ 30%                  | ❌ KHÔNG — cpp chậm 1.4× (sft/30) đến 14× (turbo/240); VAE decode của ggml ~1.7s/s audio là floor |
+| `cpp` chậm hơn > 2×                            | ✅ ĐÚNG ở 11/12 ô ma trận (ngoại lệ duy nhất sft/30s: 8.4s vs 18.4s) |
+| vLLM không chạy native **và** `pt` chậm hơn 2× | vLLM không native ✅ (Triton), nhưng `pt` NHANH HƠN cpp chứ không chậm hơn → điều kiện kép KHÔNG xảy ra |
+| Vulkan build fail hoặc sai output              | ⚠️ Không đánh giá được trên máy đo (không cài nổi SDK — giới hạn môi trường, xem spike-report S-01) |
+
+## Quyết định mặc định (Phase 0)
+
+**Backend mặc định khi cài đặt: Python `acestep-api` (`lm_backend=pt`).**
+
+Căn cứ:
+1. Trên GPU 8GB, python-pt nhanh hơn cpp ở 11/12 ô; cấu hình ship mặc định
+   của ace.cpp (LM-4B Q8_0 ≈ 7.7GB weights) còn sụp đổ hẳn từ 120s trở lên
+   do tràn VRAM (650–1846s cho job 120–240s).
+2. Python giữ trọn 6 task_type (repaint/extract là tính năng Phase 2);
+   cpp chỉ phục vụ text2music + understand.
+3. Hot-swap `/v1/init` dùng được (25–37s/swap, không leak VRAM) — đủ cho
+   VRAM scheduler, với điều kiện thiết kế **1 model resident + swap trong
+   slot**; preload 3 slot đồng thời làm cạn 8GB VRAM và treo VAE (S-05).
+4. Cold start py 39.4s tới health (<60s); warm-on-open vẫn nên làm vì
+   first-gen thật phụ thuộc lazy-load.
+5. Kill criterion "warm gen 120s > 30s" KÍCH HOẠT → Sprint 1 phải có
+   render queue + notification, không đặt cược vào UX realtime.
+
+`ace.cpp` giữ lại như provider thứ hai sau trait: hợp lý cho máy ≥12GB VRAM
+và cho mục tiêu đóng gói `.msi` không cần Python — đánh giá lại sau khi
+hạ tầng Vulkan đo được và/hoặc có quant nhỏ hơn cho bộ model.
 
 ## Hệ quả
 
