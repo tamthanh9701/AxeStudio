@@ -126,16 +126,20 @@ VAE tiled decode treo vĩnh viễn. Scheduler (WS-D) phải thiết kế theo m�
 
 | Buffer | xrun trong 30 phút | Latency đo được |
 | ------ | ------------------ | --------------- |
-| 256    |                    |                 |
-| 512    |                    |                 |
-| 1024   |                    |                 |
+| 256    | **0**              | 5.3 ms (lý thuyết 256/48kHz — không đo loopback được, cần phần cứng) |
+| 512    | **0**              | 10.7 ms (lý thuyết) |
+| 1024   | **0**              | 21.3 ms (lý thuyết) |
+
+`RESULT,S-08,512,30,0` · `RESULT,S-08,256,30,0` · `RESULT,S-08,1024,30,0`
+(dòng gốc từ example). `cargo test -p als-audio` sau khi chạy: 14/14 xanh
+(golden + no_alloc còn nguyên).
 
 ## Kill criteria — đánh dấu sau khi đo
 
 | Điều kiện                               | Kích hoạt? | Hệ quả bắt buộc                                                  |
 | --------------------------------------- | ---------- | ---------------------------------------------------------------- |
 | Warm gen 120s > 30s trên GPU mục tiêu   | ✅ KÍCH HOẠT — py pt turbo 48.8–127.4s, cpp 259.5–259.6s; chỉ py-sft sát ngưỡng (28.4s) | Bỏ UX "như nhạc cụ" → render queue + notification                |
-| Cold start > 60s                        | ❌ KHÔNG theo health (cpp 5.1s, py 39.4s); first-gen thật còn phụ thuộc lazy-load + model size | Vẫn nên warm-on-open, không bắt buộc                             |
+| Rust audio xrun ở buffer 512            | ❌ KHÔNG — 0 xrun/30 phút ở cả 256/512/1024 | Giữ buffer mặc định 512 (10.7 ms); cân nhắc 256 nếu muốn latency thấp hơn |
 | vLLM không native **và** pt chậm hơn 2× | ❌ KHÔNG — vLLM không native là đúng, nhưng pt NHANH HƠN cpp trên GPU 8GB chứ không chậm hơn | Python sống sót qua Phase 0, là ứng viên mặc định                |
 | Vulkan build fail / sai output          | ⚠️ CHƯA ĐÁNH GIÁ ĐƯỢC — SDK không cài nổi trên máy đo (UAC từ chối 3 lần); đây là giới hạn môi trường, KHÔNG phải kết luận kỹ thuật về ace.cpp | Chạy lại trên máy có SDK rồi mới tuyên bố "NVIDIA only"           |
 | Rust audio xrun ở buffer 512            | (S-08 — đang chờ cửa sổ máy yên tĩnh) | Buffer mặc định 1024 hoặc xem lại streaming                      |
