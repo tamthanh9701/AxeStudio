@@ -1,0 +1,55 @@
+# Sinh bindings TypeScript (packages/bindings/src/generated.ts) trên Windows
+# runner — máy dev Linux không build được src-tauri (thiếu webkit2gtk), nên
+# đây là đường chính thức để regen bindings khi đổi kiểu IPC.
+#
+# Cách dùng:
+#   1. gh workflow run bindings-generate -f branch=<nhánh-của-bạn>
+#   2. Chờ chạy xong → tải artifact: gh run download <run-id> -n generated-ts
+#   3. Chép generated.ts vào packages/bindings/src/ rồi commit cùng PR.
+#
+# Dispatch tay thôi (không tự chạy theo push) — sinh bindings là hành động
+# có chủ đích gắn với một PR cụ thể.
+
+name: bindings-generate
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Nhánh cần sinh bindings (mặc định: main)"
+        required: false
+        default: main
+
+concurrency:
+  group: bindings-generate-${{ github.event.inputs.branch }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm bindings:generate
+
+      # Đảm bảo file sinh ra KHÔNG drift ngay tại chỗ: chạy lại check trên
+      # chính bản vừa sinh (bindings:check so generated.ts với cargo export).
+      - run: pnpm bindings:check
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generated-ts
+          path: packages/bindings/src/generated.ts
+          if-no-files-found: error
