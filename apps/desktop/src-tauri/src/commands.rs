@@ -606,6 +606,10 @@ pub async fn engine_status(state: State<'_, AppState>) -> CmdResult<EngineStatus
             warm_models: vec![],
             vram_free_mb: None,
             queue_depth: 0,
+            // Chưa có orchestrator → không provider nào tuyên bố gì:
+            // panel Generate phải disable toàn bộ (ALS-F05 đọc từ đây).
+            capabilities: vec![],
+            models: vec![],
         }),
     }
 }
