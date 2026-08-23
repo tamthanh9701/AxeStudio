@@ -125,6 +125,7 @@ async fn bootstrap_session(state: &State<'_, AppState>, project: Project) -> Cmd
         providers,
         ProviderId(ProviderId::PY.to_owned()),
     )?;
+    let warm = handle.clone();
     forward_events(state.handle().clone(), handle.clone());
     *state.orchestrator.lock().await = Some(handle);
     *state.undo.lock().await = UndoStack::new();
@@ -142,7 +143,6 @@ async fn bootstrap_session(state: &State<'_, AppState>, project: Project) -> Cmd
     // để gen đầu tiên không gánh cold-load 39.4s (S-04). Fire-and-forget —
     // KHÔNG chặn mở project; server chưa chạy là chuyện bình thường, thất
     // bại chỉ log + event job:state failed cho UI hiển thị notice nhẹ.
-    let warm = handle.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(e) = warm.warm(ModelTier::Turbo).await {
             tracing::warn!(error = %e, "warm-on-open thất bại");
