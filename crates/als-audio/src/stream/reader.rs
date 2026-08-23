@@ -258,12 +258,15 @@ impl StreamingReader {
         false
     }
 
-    /// Control thread hỏi: worker đã đổ được dữ liệu đọc được vào ring chưa?
-    /// Dùng để warm-on-open / chờ prefetch trước khi play — KHÔNG phải đường
-    /// RT (slots() đọc atomic nội bộ của rtrb).
     pub fn has_buffered_data(&self) -> bool {
         // Consumer::slots() = số chunk ĐỌC ĐƯỢC trong ring.
         self.rx.slots() > 0
+    }
+
+    /// Số chunk đang nằm trong ring (control-side diagnostics/priming).
+    pub fn buffered_chunks(&self) -> usize {
+        // Consumer::slots() CHÍNH LÀ số chunk đọc được — không cần trừ.
+        self.rx.slots()
     }
 }
 

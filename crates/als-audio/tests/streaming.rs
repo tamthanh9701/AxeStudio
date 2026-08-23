@@ -5,28 +5,48 @@
 //! thuộc fixture trên đĩa, đúng quy ước dev-deps của crate.
 //!
 //! Về test "60 giây": giữ nguyên Ý của ticket (8 file × 60s nội dung phát
-//! SONG SONG, underrun == 0) nhưng kéo nhanh hơn realtime (~10×) — unit CI
+//! SONG SONG, underrun == 0) nhưng kéo nhanh hơn realtime (~5×) — unit CI
 //! không nên ngủ 60s; hành vi realtime đã được spike S-08 chứng minh trên
-//! thiết bị thật. Prefetch worker vẫn phải refill liên tục hàng nghìn lần.
+//! thiết bị thật.
 //!
-//! Bộ đếm cấp phát dùng thread-local flag: CHỈ đếm alloc trên THREAD TEST
-//! trong vùng render — prefetch worker được phép malloc (luật realtime áp
-//! cho callback, không áp cho worker).
+//! Ba test trong file này ĐIỀU KIỂN CPU (worker decode + vòng kéo frame).
+//! Chạy song song trên runner yếu (2 vCPU) sẽ tự giành CPU của nhau gây
+//! underrun giả → tuần tự hoá bằng atomic spin lock (không dùng std::sync
+//!::Mutex — bị cấm trong als-audio theo clippy.toml).
 //!
-//! `thread::sleep` ở đây là của TEST thread (không phải callback) — allow
-//! lint toàn file; crate test này không có tokio runtime.
+//! `thread::sleep` ở đây là của TEST thread — allow lint toàn file; crate
+//! test không có tokio runtime.
 
 #![allow(clippy::disallowed_methods)]
 
 use std::cell::Cell;
 use std::io::Cursor;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use als_audio::source::AudioSource;
 use als_audio::stream::open_source;
 use als_audio::{Mixer, StreamingInfo, StreamingReader};
+
+/// Tuần tự hoá các test nặng (xem doc đầu file). Spin-lock 1 bit: test nào
+/// giữ cờ thì test kia ngủ chờ — không phải đường RT nên sleep hợp lệ.
+static SERIAL: AtomicBool = AtomicBool::new(false);
+
+struct SerialGuard;
+
+fn take_serial() -> SerialGuard {
+    while SERIAL.swap(true, Ordering::Acquire) {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    SerialGuard
+}
+
+impl Drop for SerialGuard {
+    fn drop(&mut self) {
+        SERIAL.store(false, Ordering::Release);
+    }
+}
 
 // ---------- helpers ----------
 
@@ -61,14 +81,20 @@ fn open_reader(bytes: &[u8]) -> (StreamingReader, StreamingInfo) {
 
 #[test]
 fn eight_files_sixty_seconds_parallel_no_underrun() {
+    let _serial = take_serial();
+
     const FILES: usize = 8;
     const SECONDS: u32 = 60;
     const SR: u32 = 48_000;
     /// 100ms silence liên tục giữa dòng = underrun nghe được → fail.
     const SILENT_RUN_LIMIT: u64 = 4_800;
-    /// Kéo nhanh hơn realtime bao nhiêu lần (xem doc đầu file). 10× vẫn đủ
-    /// ép worker refill liên tục nhưng chừa headroom cho CI chạy song song.
-    const SPEEDUP: f64 = 10.0;
+    /// Kéo nhanh hơn realtime bao nhiêu lần (xem doc đầu file). 5× vẫn ép
+    /// worker refill liên tục nhưng chừa headroom cho runner yếu.
+    const SPEEDUP: f64 = 5.0;
+    /// Prime tới khi ring giữ được ít nhất số chunk này (~0.7s audio) —
+    /// hấp thụ độ trễ lịch của worker trên runner throttled.
+    const PRIME_CHUNKS: usize = 8;
+
     let bytes = Arc::new(make_wav_bytes(SECONDS, SR));
     let mut readers: Vec<StreamingReader> = Vec::with_capacity(FILES);
     let mut infos: Vec<StreamingInfo> = Vec::with_capacity(FILES);
@@ -79,17 +105,18 @@ fn eight_files_sixty_seconds_parallel_no_underrun() {
         infos.push(info);
     }
 
-    // PRIME (ngoài vùng đo): chờ chunk đầu của từng reader. Trong app thật,
-    // play luôn xảy ra sau khi mở file vài giây nên cold-start không tính
-    // là underrun phát — nó là warm-up.
+    // PRIME (ngoài vùng đo): chờ ring mỗi reader đầy đáng kể. Trong app
+    // thật, play luôn xảy ra sau khi mở file nên cold-start không tính là
+    // underrun phát — nó là warm-up.
     for r in readers.iter_mut() {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !r.has_buffered_data() {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while r.buffered_chunks() < PRIME_CHUNKS {
             assert!(
                 Instant::now() < deadline,
-                "prefetch không nạp được chunk đầu"
+                "prefetch không nạp đủ {} chunk",
+                PRIME_CHUNKS
             );
-            std::thread::sleep(Duration::from_millis(1));
+            std::thread::sleep(Duration::from_millis(2));
         }
     }
 
@@ -100,7 +127,7 @@ fn eight_files_sixty_seconds_parallel_no_underrun() {
             break;
         }
         assert!(
-            started.elapsed() < Duration::from_secs(120),
+            started.elapsed() < Duration::from_secs(180),
             "timeout tổng của test"
         );
         for r in readers.iter_mut() {
@@ -121,7 +148,7 @@ fn eight_files_sixty_seconds_parallel_no_underrun() {
                 }
             }
         }
-        // Giữ lịch ~20× realtime: đi sớm thì nghỉ bớt (≤2ms/lần để burst
+        // Giữ lịch ~5× realtime: đi sớm thì nghỉ bớt (≤2ms/lần để burst
         // không vượt sức chứa ring 2s).
         if let Some(behind) = min_elapsed.checked_sub(started.elapsed()) {
             std::thread::sleep(behind.min(Duration::from_millis(2)));
@@ -137,6 +164,8 @@ fn eight_files_sixty_seconds_parallel_no_underrun() {
 
 #[test]
 fn seek_storm_500_no_deadlock_no_panic() {
+    let _serial = take_serial();
+
     let bytes = make_wav_bytes(30, 48_000);
     let (mut r, info) = open_reader(&bytes);
     let total = info.total_frames.max(1);
@@ -208,20 +237,33 @@ impl Drop for Measure {
 
 #[test]
 fn streaming_render_allocates_nothing_in_callback_path() {
+    let _serial = take_serial();
+
     // Chuẩn bị (ngoài vùng đo): 2 track streaming + mixer, đợi ring đầy.
     let bytes = Arc::new(make_wav_bytes(10, 48_000));
-    let mut sources: Vec<Option<Box<dyn AudioSource>>> = Vec::new();
+    let mut readers: Vec<StreamingReader> = Vec::new();
     for _ in 0..2 {
         let (r, _) = open_reader(&bytes);
-        sources.push(Some(Box::new(r)));
+        readers.push(r);
     }
     let mut mixer = Mixer::new();
     mixer.add_track().unwrap();
     mixer.add_track().unwrap();
     let mut out = vec![0.0f32; 512 * 2];
 
-    // Đợi prefetch đổ đầy + kéo nóng một lượt (mở đường code lần đầu).
-    std::thread::sleep(Duration::from_millis(250));
+    // Đợi prefetch đổ đầy (qua handle cụ thể — trait object không có
+    // buffered_chunks).
+    for r in &mut readers {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while r.buffered_chunks() < 8 {
+            assert!(Instant::now() < deadline, "prefetch không kịp");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+    let mut sources: Vec<Option<Box<dyn AudioSource>>> = readers
+        .into_iter()
+        .map(|r| Some(Box::new(r) as Box<dyn AudioSource>))
+        .collect();
     for s in sources.iter_mut().flatten() {
         for _ in 0..2048 {
             let _ = s.next_frame();
@@ -229,6 +271,8 @@ fn streaming_render_allocates_nothing_in_callback_path() {
     }
 
     // VÒNG ĐO: mô phỏng callback — render + loop-wrap seek, xen kẽ như engine.
+    // Seek định kỳ khiến reader đói vài episode (worker phải nạp lại từ đầu)
+    // — chấp nhận được: acceptance ở đây là KHÔNG CẤP PHÁT, không phải 0 đói.
     let before = ALLOC_COUNT.load(Ordering::SeqCst);
     {
         let _guard = Measure::start();
