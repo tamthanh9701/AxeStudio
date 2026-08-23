@@ -105,10 +105,10 @@ VAE tiled decode treo vĩnh viễn. Scheduler (WS-D) phải thiết kế theo m�
 
 | Crossfade | Nghe được seam? | Ghi chú |
 | --------- | --------------- | ------- |
-| 0ms       |                 |         |
-| 50ms      |                 |         |
-| 150ms     |                 |         |
-| 300ms     |                 |         |
+| 0ms       | **Có** (P1)     | clip2 — seam nghe rõ |
+| 50ms      | Không rõ (P1: "cũng được") | clip4 — chờ P2 xác nhận |
+| 150ms     | Không rõ (P1: "cũng được") | clip3 — chờ P2 xác nhận |
+| 300ms     | **Có** (P1)     | clip1 — bất thường: crossfade 300ms vẫn nghe được; người nghe mô tả "đoạn giữa bị lặp lại" → nghi là artifact NỘI DUNG của repaint (motif lặp) chứ không phải biên fade. P2 xoay lại để phân biệt |
 
 **Chốt:** ___ ms
 
@@ -116,11 +116,26 @@ VAE tiled decode treo vĩnh viễn. Scheduler (WS-D) phải thiết kế theo m�
 
 | Bài | vocals (ACE/Demucs) | drums | bass | other |
 | --- | ------------------- | ----- | ---- | ----- |
-| 1   | /                   | /     | /    | /     |
-| 2   | /                   | /     | /    | /     |
-| 3   | /                   | /     | /    | /     |
-| 4   | /                   | /     | /    | /     |
-| 5   | /                   | /     | /    | /     |
+| 1   | thua / thắng (P1) | thua / thắng | thua / thắng | thua / thắng (synth) |
+| 2   | thua / thắng | thua / thắng | thua / thắng¹ | thua / thắng (guitar) |
+| 3   | thua / thắng² | thua / thắng | thua / thắng | thua / thắng (synth) |
+| 4   | không chấm được³ | thua / thắng⁴ | thua / thắng⁴ | hòa (guitar) |
+| 5   | thua / thắng | thua / thắng | thua / thắng | không so sánh được⁵ |
+
+Tổng P1: **Demucs 17 thắng — ACE 0 thắng — 1 hòa — 2 không chấm được**
+(vocals 4-0, drums 5-0, bass 5-0, other 3-0-1-1).
+
+¹ bass rock: ACE gần như toàn bộ instrument; Demucs đúng bass nhưng mờ
+² vocal electronic: ACE hỏng ("chọp chẹp"); Demucs là vocal đúng
+³ acoustic/vocals: cả hai bất thường — Demucs nghe "giống cello"; người nghe
+  nghi do export vocal trên nền không có vocal. Chờ P2.
+⁴ acoustic/drums+bass: bài gốc KHÔNG có drums/bass — Demucs xuất file gần
+  rỗng (đúng), ACE xuất full instrument (sai)
+⁵ vietvoc/guitar: bài không có guitar nhưng CẢ HAI đều xuất nội dung — bất
+  thường ở cả hai hệ
+
+Các file nghe do **ACE-Step base tự sinh** (pop/rock/electronic/acoustic/
+vocal Việt, 30s mỗi bài) — người nghe biết trước giới hạn này.
 
 ## S-08 — Rust audio prototype
 
