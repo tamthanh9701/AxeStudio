@@ -1,6 +1,6 @@
 # Phase 0 — Spike Report
 
-> **Trạng thái: CHƯA ĐIỀN.** Không bắt đầu Sprint 1 khi bảng này còn ô trống.
+> **Trạng thái: ĐÃ ĐIỀN (còn 2 mục S-06/S-07 chờ phiên nghe thứ hai).**
 >
 > Mỗi ô phải có số đo thực tế kèm cấu hình máy đo (GPU, VRAM, RAM, driver). Đoán = chưa đo.
 
