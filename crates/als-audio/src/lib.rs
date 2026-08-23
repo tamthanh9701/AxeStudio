@@ -18,6 +18,7 @@ pub mod mixer;
 pub mod playhead;
 pub mod rt_guard;
 pub mod source;
+pub mod stream;
 pub mod transport;
 pub mod xrun;
 
@@ -27,6 +28,7 @@ pub use meter::{MeterReading, Meters};
 pub use mixer::{Mixer, TrackState};
 pub use playhead::Playhead;
 pub use source::{AudioSource, BufferSource};
+pub use stream::{StreamingInfo, StreamingReader};
 pub use xrun::XrunCounter;
 
 /// Đổi dB → linear. Mixer chỉ làm việc với gain linear để golden test đơn giản;
