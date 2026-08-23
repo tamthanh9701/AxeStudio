@@ -10,8 +10,13 @@ publish = false
 [dependencies]
 cpal.workspace = true
 rtrb.workspace = true
+symphonia.workspace = true # ALS-B02: decode WAV/FLAC cho StreamingReader
 thiserror.workspace = true
 
 [dev-dependencies]
 # Không dùng tempfile: test audio phải chạy được hoàn toàn trong RAM.
 hound.workspace = true # example spike8_wav8 (S-08): decode WAV thử
+
+[[bench]]
+name = "stream_cb"
+harness = false
