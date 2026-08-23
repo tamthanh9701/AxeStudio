@@ -13,7 +13,9 @@
 //! ```
 
 use crate::provider::{JobCtx, RenderProvider};
-use crate::types::{Capability, PlanInput, PlanOutput, Progress, RenderInput, UnderstandInput};
+use crate::types::{
+    Capability, PlanInput, PlanOutput, Progress, RenderInput, Slot, UnderstandInput,
+};
 use als_core::{GenerationRecipe, JobId, ModelTier, SamplingParams, TaskType};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -165,6 +167,27 @@ pub async fn check_cancel_unknown_job(p: &dyn RenderProvider) {
         .expect("cancel() job lạ bị treo");
 }
 
+/// warmup() phải báo tiến độ và kết thúc ở mức ≥ 90% (issue #14) —
+/// progress bar câm trong 25–40s load là lỗi UX.
+pub async fn check_warmup_progress(p: &dyn RenderProvider) {
+    let model = first_model(p).await;
+    let (cx, mut rx) = ctx(CancellationToken::new());
+    p.warmup(&model, Slot(1), cx)
+        .await
+        .expect("warmup() phải Ok");
+    let mut msgs = 0;
+    let mut last = 0u8;
+    while let Ok(prog) = rx.try_recv() {
+        msgs += 1;
+        last = last.max(prog.percent);
+    }
+    assert!(msgs >= 1, "warmup() không báo tiến độ nào qua cx");
+    assert!(
+        (90..=100).contains(&last),
+        "warmup() kết thúc ở {last}% — kỳ vọng ≥ 90"
+    );
+}
+
 /// understand(): chỉ kiểm khi provider tuyên bố có capability Understand.
 pub async fn check_understand_if_supported(p: &dyn RenderProvider) {
     if !p.capabilities().contains(&Capability::Understand) {
@@ -214,5 +237,6 @@ pub async fn run_all(p: &dyn RenderProvider) {
     check_plan_render_roundtrip(p).await;
     check_cancel_before_dispatch(p).await;
     check_cancel_unknown_job(p).await;
+    check_warmup_progress(p).await;
     check_understand_if_supported(p).await;
 }

@@ -46,12 +46,55 @@ impl PyProvider {
         }
     }
 
+    /// Poll một warm task tới khi xong — cùng hình dạng với loop render(),
+    /// nhưng stage là Planning và không tải file kết quả.
+    async fn poll_warm_task(&self, task_id: &str, cx: JobCtx) -> Result<()> {
+        let started = Instant::now();
+        loop {
+            if cx.cancel.is_cancelled() {
+                return Err(ProviderError::Cancelled);
+            }
+            if started.elapsed() > self.job_timeout {
+                return Err(ProviderError::Timeout);
+            }
+            tokio::time::sleep(self.poll_interval).await;
+            let res = self.client.query_result(task_id).await?;
+            match res.status() {
+                TaskStatus::QueuedOrRunning => {
+                    // Không biết tổng thời gian load — leo dần tới 95% theo
+                    // ước lượng WARM_ESTIMATE, giống cách render() làm.
+                    let pct = ((started.elapsed().as_millis() as f64
+                        / WARM_ESTIMATE.as_millis() as f64)
+                        * 95.0)
+                        .min(95.0) as u8;
+                    cx.report(pct.max(5), ProgressStage::Planning).await;
+                }
+                TaskStatus::Succeeded => {
+                    cx.report(100, ProgressStage::Planning).await;
+                    return Ok(());
+                }
+                TaskStatus::Failed => {
+                    return Err(ProviderError::Worker(
+                        res.error.unwrap_or_else(|| "warm task failed".into()),
+                    ));
+                }
+                TaskStatus::Unknown(s) => {
+                    return Err(ProviderError::InvalidResponse(format!("status lạ: {s}")));
+                }
+            }
+        }
+    }
+
     #[cfg(test)]
     pub fn with_poll_interval(mut self, d: Duration) -> Self {
         self.poll_interval = d;
         self
     }
 }
+
+/// Load model mất 25–37s trên máy đo (S-05, RTX 3070) — dùng median làm
+/// mốc ước lượng tiến độ khi server không trả task handle cho /v1/init.
+const WARM_ESTIMATE: Duration = Duration::from_secs(30);
 
 /// Trích đường dẫn file audio + audio_codes từ result_json.
 /// TODO(S-02): xác nhận schema thật của result_json trên server chạy thật.
@@ -216,9 +259,39 @@ impl RenderProvider for PyProvider {
         ))
     }
 
-    async fn warmup(&self, model: &ModelId, slot: Slot) -> Result<()> {
-        self.client.init_model(&model.0, slot.0).await?;
-        Ok(())
+    async fn warmup(&self, model: &ModelId, slot: Slot, cx: JobCtx) -> Result<()> {
+        if cx.cancel.is_cancelled() {
+            return Err(ProviderError::Cancelled);
+        }
+        cx.report(2, ProgressStage::Queued).await;
+        let init = self.client.init_model(&model.0, slot.0).await?;
+        // Server CÓ trả task handle thì poll THẬT qua /query_result
+        // (1 lần/s — trong ngưỡng ≤4 lần/s của contract IPC).
+        match init.get("task_id").and_then(|v| v.as_str()) {
+            Some(task_id) => self.poll_warm_task(task_id, cx).await,
+            None => {
+                // Response /v1/init chưa được xác nhận trên server thật
+                // (S-05 chỉ chứng minh init trả tức thì + load chạy ngầm).
+                // Không có handle → ước lượng theo WARM_ESTIMATE và DỪNG Ở
+                // 95%: KHÔNG tự tuyên bố "load xong" khi không có xác nhận.
+                // Gen đầu tiên sau warm vẫn đúng — server xếp phần load còn
+                // dang dở vào trước request đó.
+                let started = Instant::now();
+                while started.elapsed() < WARM_ESTIMATE {
+                    if cx.cancel.is_cancelled() {
+                        return Err(ProviderError::Cancelled);
+                    }
+                    tokio::time::sleep(self.poll_interval).await;
+                    let pct = ((started.elapsed().as_millis() as f64
+                        / WARM_ESTIMATE.as_millis() as f64)
+                        * 93.0)
+                        .min(93.0) as u8;
+                    cx.report(pct.max(5), ProgressStage::Planning).await;
+                }
+                cx.report(95, ProgressStage::Planning).await;
+                Ok(())
+            }
+        }
     }
 
     async fn cancel(&self, _job: &JobId) -> Result<CancelOutcome> {

@@ -55,17 +55,20 @@ function JobList() {
   if (active.length === 0) return null
   return (
     <div className="jobs">
-      {active.map(([id, j]) => (
-        <div key={id} className="job-item">
-          <div className="job-bar">
-            <div className="job-bar-fill" style={{ width: `${j.percent}%` }} />
+      {active.map(([id, j]) => {
+        const warm = id.startsWith("warm:")
+        return (
+          <div key={id} className="job-item">
+            <div className="job-bar">
+              <div className="job-bar-fill" style={{ width: `${j.percent}%` }} />
+            </div>
+            <span className="dim job-stage">
+              {warm ? "Nạp model" : j.stage} · {j.percent}%
+            </span>
+            {!warm && <button onClick={() => void ipc.jobCancel(id).catch(() => {})}>Huỷ</button>}
           </div>
-          <span className="dim job-stage">
-            {j.stage} · {j.percent}%
-          </span>
-          <button onClick={() => void ipc.jobCancel(id).catch(() => {})}>Huỷ</button>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

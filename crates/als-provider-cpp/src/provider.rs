@@ -207,8 +207,10 @@ impl RenderProvider for CppProvider {
         })
     }
 
-    async fn warmup(&self, _model: &ModelId, _slot: Slot) -> Result<()> {
-        // ace-server nạp model lúc spawn — warmup là no-op.
+    async fn warmup(&self, _model: &ModelId, _slot: Slot, cx: JobCtx) -> Result<()> {
+        // ace-server nạp model lúc spawn — warmup là no-op thực sự, nên báo
+        // thẳng 100% (xác nhận "load xong" là thật: model đã resident).
+        cx.report(100, ProgressStage::Planning).await;
         Ok(())
     }
 

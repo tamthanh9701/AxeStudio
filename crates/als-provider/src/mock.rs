@@ -200,7 +200,9 @@ impl RenderProvider for MockProvider {
         })
     }
 
-    async fn warmup(&self, _model: &ModelId, _slot: Slot) -> Result<()> {
+    async fn warmup(&self, _model: &ModelId, _slot: Slot, cx: JobCtx) -> Result<()> {
+        cx.report(50, ProgressStage::Queued).await;
+        cx.report(100, ProgressStage::Planning).await;
         Ok(())
     }
 

@@ -53,7 +53,11 @@ pub trait RenderProvider: Send + Sync {
     async fn understand(&self, input: UnderstandInput, cx: JobCtx) -> Result<AudioAnalysis>;
 
     /// Nạp nóng một model vào slot. No-op nếu đã warm.
-    async fn warmup(&self, model: &ModelId, slot: Slot) -> Result<()>;
+    ///
+    /// PHẢI báo tiến độ qua `cx` (issue #14): load thật mất 25–40s (S-05),
+    /// progress bar câm là lỗi UX. Kết thúc ở percent ≥ 90; chỉ báo 100 khi
+    /// có xác nhận "load xong" từ server (task handle hoặc no-op thực sự).
+    async fn warmup(&self, model: &ModelId, slot: Slot, cx: JobCtx) -> Result<()>;
 
     /// Huỷ job. Trả `TooLate` khi job đã dispatch — CẤM giả vờ Cancelled.
     async fn cancel(&self, job: &JobId) -> Result<CancelOutcome>;
