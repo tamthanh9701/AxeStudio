@@ -103,14 +103,16 @@ VAE tiled decode treo vĩnh viễn. Scheduler (WS-D) phải thiết kế theo m�
 
 ## S-06 — Repaint seam (sft)
 
-| Crossfade | Nghe được seam?            | Ghi chú                                                                                                                                                                                           |
-| --------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0ms       | **Có** (P1)                | clip2 — seam nghe rõ                                                                                                                                                                              |
-| 50ms      | Không rõ (P1: "cũng được") | clip4 — chờ P2 xác nhận                                                                                                                                                                           |
-| 150ms     | Không rõ (P1: "cũng được") | clip3 — chờ P2 xác nhận                                                                                                                                                                           |
-| 300ms     | **Có** (P1)                | clip1 — bất thường: crossfade 300ms vẫn nghe được; người nghe mô tả "đoạn giữa bị lặp lại" → nghi là artifact NỘI DUNG của repaint (motif lặp) chứ không phải biên fade. P2 xoay lại để phân biệt |
+| Crossfade | Nghe được seam?                             | Ghi chú                                                                                    |
+| --------- | ------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 0ms       | **Có** (P1) · **Có** (P2)                   | nhất quán 2 phiên — hard cut chắc chắn hở seam                                             |
+| 50ms      | Không rõ (P1: "cũng được") · **Không** (P2) | nghiêng về không seam; P1 không khẳng định                                                 |
+| 150ms     | Không rõ (P1: "cũng được") · **Không** (P2) | sạch qua P2, không bị phản đối ở P1                                                        |
+| 300ms     | **Có** (P1) · **Không** (P2)                | KHÔNG tái lập — xác nhận P1 nghe nhầm motif lặp của NỘI DUNG repaint, không phải biên fade |
 
-**Chốt:** ___ ms
+**Chốt:** **150 ms** — mức nhỏ nhất được P2 xác nhận rõ "không seam" và
+P1 không phản đối; trùng đúng giá trị fallback đã thống nhất trước khi đo.
+(0ms hở seam ở cả 2 phiên → crossfade bắt buộc.)
 
 ## S-07 — Extract vs Demucs v4
 
