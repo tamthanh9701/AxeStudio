@@ -56,11 +56,10 @@ Contract gốc nói "playhead đọc từ `AtomicU64` chia sẻ". Điều đó �
 
 ### Engine
 
-| Command                 | Input             | Output                                                  |
-| ----------------------- | ----------------- | ------------------------------------------------------- |
-| `engine_status`         | `()`              | `EngineStatus` — backend, model warm, VRAM, queue depth |
-| `engine_switch_backend` | `{ provider_id }` | `()`                                                    |
-| `engine_warmup`         | `{ model_id }`    | `()` (no-op v1)                                         |
+| Command                 | Input             | Output                                                                                                                                          |
+| ----------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `engine_switch_backend` | `{ provider_id }` | `()`                                                                                                                                            |
+| `engine_warmup`         | —                 | Không có lệnh thủ công ở v1: model được nạp nóng **tự động** khi mở project (issue #14, ADR-001). Lệnh thủ công cân nhắc thêm khi có nhu cầu UI |
 
 ### Export
 
@@ -78,6 +77,26 @@ Contract gốc nói "playhead đọc từ `AtomicU64` chia sẻ". Điều đó �
 | `engine:status` | `EngineStatus`                         | Khi thay đổi, tối đa 1 lần/giây        |
 | `peaks:ready`   | `{ asset_id }`                         | Peaks sinh xong                        |
 | `project:dirty` | `{ dirty }`                            | Undo stack thay đổi                    |
+
+### Warm-on-open (issue #14)
+
+Khi mở project, orchestrator tự nạp nóng model mặc định (Turbo) **trước khi
+người dùng kịp bấm generate** — kill criterion "warm gen 120s > 30s" của
+Phase 0 loại bỏ UX realtime, warm giúp lượt generate ĐẦU không gánh thêm
+cold-load. Warm đi qua CÙNG event `job:progress` / `job:state` như render,
+với job_id pseudo có tiền tố **`warm:`** (`warm:<uuid>`):
+
+- UI nhận biết job warm bằng tiền tố này (hiển thị nhãn riêng kiểu
+  "Nạp model", không cho huỷ ở v1).
+- Tiến độ là SỰ THẬT từ provider: py poll `/query_result` ≤ 4 lần/s khi
+  `/v1/init` trả task handle; khi không có handle, percent ước lượng theo
+  median đo được ở S-05 (25–37s) và DỪNG ở 95% — không bao giờ tự tuyên bố
+  100% khi thiếu xác nhận "load xong" từ server.
+- Warm và render KHÔNG BAO GIỜ chạy song song: acestep-api swap model trong
+  slot sẽ làm hỏng job đang chạy (S-04/S-05). Warm khi slot bận → xếp hàng
+  (`job:state = queued`) và chỉ chạy khi queue render cạn.
+- Thất bại warm KHÔNG chặn mở project hay generate — gen đầu tiên chỉ
+  chậm hơn (server lazy-load), UI hiện notice nhẹ.
 
 ## Playback wiring (v1)
 
