@@ -44,18 +44,19 @@ mặc định" bên dưới.
 
 ### Tiêu chí chốt — kết quả Phase 0 (máy đo: RTX 3070 8GB, driver 596.49, Win11 build 26200)
 
-| Điều kiện quan sát được                        | Kết quả đo (LM-0.6B công bằng cả hai bên)      |
-| ---------------------------------------------- | -------------------------------------------- |
-| `cpp` chậm hơn `python` ≤ 30%                  | ❌ KHÔNG — cpp chậm 1.4× (sft/30) đến 14× (turbo/240); VAE decode của ggml ~1.7s/s audio là floor |
-| `cpp` chậm hơn > 2×                            | ✅ ĐÚNG ở 11/12 ô ma trận (ngoại lệ duy nhất sft/30s: 8.4s vs 18.4s) |
+| Điều kiện quan sát được                        | Kết quả đo (LM-0.6B công bằng cả hai bên)                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `cpp` chậm hơn `python` ≤ 30%                  | ❌ KHÔNG — cpp chậm 1.4× (sft/30) đến 14× (turbo/240); VAE decode của ggml ~1.7s/s audio là floor       |
+| `cpp` chậm hơn > 2×                            | ✅ ĐÚNG ở 11/12 ô ma trận (ngoại lệ duy nhất sft/30s: 8.4s vs 18.4s)                                    |
 | vLLM không chạy native **và** `pt` chậm hơn 2× | vLLM không native ✅ (Triton), nhưng `pt` NHANH HƠN cpp chứ không chậm hơn → điều kiện kép KHÔNG xảy ra |
-| Vulkan build fail hoặc sai output              | ⚠️ Không đánh giá được trên máy đo (không cài nổi SDK — giới hạn môi trường, xem spike-report S-01) |
+| Vulkan build fail hoặc sai output              | ⚠️ Không đánh giá được trên máy đo (không cài nổi SDK — giới hạn môi trường, xem spike-report S-01)     |
 
 ## Quyết định mặc định (Phase 0)
 
 **Backend mặc định khi cài đặt: Python `acestep-api` (`lm_backend=pt`).**
 
 Căn cứ:
+
 1. Trên GPU 8GB, python-pt nhanh hơn cpp ở 11/12 ô; cấu hình ship mặc định
    của ace.cpp (LM-4B Q8_0 ≈ 7.7GB weights) còn sụp đổ hẳn từ 120s trở lên
    do tràn VRAM (650–1846s cho job 120–240s).

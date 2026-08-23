@@ -16,31 +16,31 @@
 
 ## S-01 — Build acestep.cpp
 
-| Backend | Build được? | Binary chạy? | Ghi chú |
-| ------- | ----------- | ------------ | ------- |
-| CUDA    | ✅ (CMake 3.31 + Ninja, nvcc 13.3, 183/183 target) | ✅ `ace-server.exe` — `/props` 200, `/understand` 200, `/lm`+`/synth?wav=1` trả WAV RIFF | Log: `docs/phase0/logs/s01-cuda.txt`. Submodule pin `acestep.vst3@b04bf8a` (ggml@4d74a9a8). Lưu ý runtime: cần `cublas64_13.dll`/`cublasLt64_13.dll` (CUDA bin/x64) + shim `cudart_hybrid64.dll` (copy của cudart64_13) cạnh exe |
-| Vulkan  | ❌ — chưa đo được trên máy này: Vulkan SDK installer (winget/LunarG) cần UAC elevation và bị từ chối/hết hạn 3 lần; bản zip LunarG thực chất là EXE | — | Chưa phải kết luận kỹ thuật về code — là giới hạn môi trường đo. Cần máy/cài SDK rồi chạy lại trước khi tuyên bố "NVIDIA only" |
+| Backend | Build được?                                                                                                                                         | Binary chạy?                                                                             | Ghi chú                                                                                                                                                                                                                          |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CUDA    | ✅ (CMake 3.31 + Ninja, nvcc 13.3, 183/183 target)                                                                                                  | ✅ `ace-server.exe` — `/props` 200, `/understand` 200, `/lm`+`/synth?wav=1` trả WAV RIFF | Log: `docs/phase0/logs/s01-cuda.txt`. Submodule pin `acestep.vst3@b04bf8a` (ggml@4d74a9a8). Lưu ý runtime: cần `cublas64_13.dll`/`cublasLt64_13.dll` (CUDA bin/x64) + shim `cudart_hybrid64.dll` (copy của cudart64_13) cạnh exe |
+| Vulkan  | ❌ — chưa đo được trên máy này: Vulkan SDK installer (winget/LunarG) cần UAC elevation và bị từ chối/hết hạn 3 lần; bản zip LunarG thực chất là EXE | —                                                                                        | Chưa phải kết luận kỹ thuật về code — là giới hạn môi trường đo. Cần máy/cài SDK rồi chạy lại trước khi tuyên bố "NVIDIA only"                                                                                                   |
 
 ## S-02 — Python ACE-Step 1.5 native Windows
 
-| Mục                            | Kết quả |
-| ------------------------------ | ------- |
-| `uv sync` thành công           | ✅ (uv 0.12.5, Python 3.12.10 native Windows)                                                                                                          |
-| `lm_backend=vllm` native       | ❌ — server log: "vLLM backend is unavailable on Windows because Triton is not installed or is incompatible. Falling back to the PyTorch backend."     |
+| Mục                            | Kết quả                                                                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `uv sync` thành công           | ✅ (uv 0.12.5, Python 3.12.10 native Windows)                                                                                                           |
+| `lm_backend=vllm` native       | ❌ — server log: "vLLM backend is unavailable on Windows because Triton is not installed or is incompatible. Falling back to the PyTorch backend."      |
 | `lm_backend=pt` thời gian plan | LM phase (log server, load→offload trừ DiT): 28.9 / 19.0 / 13.5 s — median ≈ 19 s. Total-wall cả job (script bấm): 44.9 / 32.8 / 34.9 s — median 34.9 s |
 
 ## S-03 — Benchmark ma trận
 
 Thời gian sinh (giây), warm model:
 
-|             | cpp CUDA | cpp Vulkan | python pt | python vllm |
-| ----------- | -------- | ---------- | --------- | ----------- |
-| turbo, 30s  | 57.2 / 61.5 | ❌ | 44.6 / 18.4 | ❌ vllm không có trên Windows — server tự fallback pt (xem S-02) |
-| turbo, 120s | 259.5 / 259.6 | ❌ | 127.4 / 48.8 | ❌ (fallback pt) |
-| turbo, 240s | 519.3 / 519.6 | ❌ | 48.4 / 36.3 | ❌ (fallback pt) |
-| sft, 30s    | 8.4 / 7.6 | ❌ | 18.4 / 20.7 | ❌ (fallback pt) |
-| sft, 120s   | 131.7 / 183.0 | ❌ | 36.4 / 28.4 | ❌ (fallback pt) |
-| sft, 240s   | 409.9 / 407.5 | ❌ | 38.5 / 54.8 | ❌ (fallback pt) |
+|             | cpp CUDA      | cpp Vulkan | python pt    | python vllm                                                      |
+| ----------- | ------------- | ---------- | ------------ | ---------------------------------------------------------------- |
+| turbo, 30s  | 57.2 / 61.5   | ❌         | 44.6 / 18.4  | ❌ vllm không có trên Windows — server tự fallback pt (xem S-02) |
+| turbo, 120s | 259.5 / 259.6 | ❌         | 127.4 / 48.8 | ❌ (fallback pt)                                                 |
+| turbo, 240s | 519.3 / 519.6 | ❌         | 48.4 / 36.3  | ❌ (fallback pt)                                                 |
+| sft, 30s    | 8.4 / 7.6     | ❌         | 18.4 / 20.7  | ❌ (fallback pt)                                                 |
+| sft, 120s   | 131.7 / 183.0 | ❌         | 36.4 / 28.4  | ❌ (fallback pt)                                                 |
+| sft, 240s   | 409.9 / 407.5 | ❌         | 38.5 / 54.8  | ❌ (fallback pt)                                                 |
 
 **Cấu hình cột cpp:** LM-0.6B Q8_0 — giống hệt LM mà phía py tự chọn (auto
 tier) → so sánh công bằng backend. VAE decode của cpp chiếm phần lớn thời
@@ -63,12 +63,12 @@ trạng, không làm tròn lên (issue #2).
 
 ## S-04 — Cold start / VRAM
 
-| Backend     | Cold start (s) | Warm gen 120s (s) | Peak VRAM turbo | Peak VRAM sft | RAM host đỉnh |
-| ----------- | -------------- | ----------------- | --------------- | ------------- | ------------- |
-| cpp CUDA    | 5.1 (/props — model nạp lazy theo request đầu) | ≈260 (S-03, LM-0.6B) | 7767 MB | 7781 MB | 1484 / 1407 MB |
-| cpp Vulkan  | ❌ | ❌ | ❌ | ❌ | ❌ |
-| python pt   | 39.4 (/v1/models — weights lazy-load theo job đầu) | turbo: hoàn thành trong window; sft: 36.4 / 28.4 (S-03) | 7985 MB | 7958 MB | ⚠️ 31 MB — đo nhầm `uv` wrapper thay vì con python, không đại diện |
-| python vllm | ❌ — không có native Windows | — | — | — | — |
+| Backend     | Cold start (s)                                     | Warm gen 120s (s)                                       | Peak VRAM turbo | Peak VRAM sft | RAM host đỉnh                                                      |
+| ----------- | -------------------------------------------------- | ------------------------------------------------------- | --------------- | ------------- | ------------------------------------------------------------------ |
+| cpp CUDA    | 5.1 (/props — model nạp lazy theo request đầu)     | ≈260 (S-03, LM-0.6B)                                    | 7767 MB         | 7781 MB       | 1484 / 1407 MB                                                     |
+| cpp Vulkan  | ❌                                                 | ❌                                                      | ❌              | ❌            | ❌                                                                 |
+| python pt   | 39.4 (/v1/models — weights lazy-load theo job đầu) | turbo: hoàn thành trong window; sft: 36.4 / 28.4 (S-03) | 7985 MB         | 7958 MB       | ⚠️ 31 MB — đo nhầm `uv` wrapper thay vì con python, không đại diện |
+| python vllm | ❌ — không có native Windows                       | —                                                       | —               | —             | —                                                                  |
 
 Ghi chú py: lần đo sft thứ hai bị nhiễm (process con `python` sống sót sau
 khi kill `uv` cha, port 8001 còn listener → cold=0 giả). Cold start boot
@@ -86,10 +86,10 @@ treo vĩnh viễn ở mức free ≈ 0.04 GB. Xem S-05.
 
 ## S-05 — Hot-swap `/v1/init`
 
-| Chuyển đổi  | Thời gian (s) | VRAM đỉnh trong lúc swap |
+| Chuyển đổi | Thời gian (s) | VRAM đỉnh trong lúc swap |
 | ----------- | ------------------------ |
 | turbo → sft | 36.5 (từ lúc POST /v1/init đến khi gen 30s xác minh xong) | 7738 MB (before 6819 → after 6952 MB) |
-| sft → base  | 25.0 (cùng giao thức) | 7396 MB (before 6964 → after 6792 MB) |
+| sft → base | 25.0 (cùng giao thức) | 7396 MB (before 6964 → after 6792 MB) |
 
 **Kết luận:** hot-swap **DÙNG ĐƯỢC** cho VRAM scheduler — 3 lần swap liên
 tiếp không thấy VRAM tích tụ (6819 → 6952 → 6792 MB, dao động ±130 MB là
@@ -103,24 +103,24 @@ VAE tiled decode treo vĩnh viễn. Scheduler (WS-D) phải thiết kế theo m�
 
 ## S-06 — Repaint seam (sft)
 
-| Crossfade | Nghe được seam? | Ghi chú |
-| --------- | --------------- | ------- |
-| 0ms       | **Có** (P1)     | clip2 — seam nghe rõ |
-| 50ms      | Không rõ (P1: "cũng được") | clip4 — chờ P2 xác nhận |
-| 150ms     | Không rõ (P1: "cũng được") | clip3 — chờ P2 xác nhận |
-| 300ms     | **Có** (P1)     | clip1 — bất thường: crossfade 300ms vẫn nghe được; người nghe mô tả "đoạn giữa bị lặp lại" → nghi là artifact NỘI DUNG của repaint (motif lặp) chứ không phải biên fade. P2 xoay lại để phân biệt |
+| Crossfade | Nghe được seam?            | Ghi chú                                                                                                                                                                                           |
+| --------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0ms       | **Có** (P1)                | clip2 — seam nghe rõ                                                                                                                                                                              |
+| 50ms      | Không rõ (P1: "cũng được") | clip4 — chờ P2 xác nhận                                                                                                                                                                           |
+| 150ms     | Không rõ (P1: "cũng được") | clip3 — chờ P2 xác nhận                                                                                                                                                                           |
+| 300ms     | **Có** (P1)                | clip1 — bất thường: crossfade 300ms vẫn nghe được; người nghe mô tả "đoạn giữa bị lặp lại" → nghi là artifact NỘI DUNG của repaint (motif lặp) chứ không phải biên fade. P2 xoay lại để phân biệt |
 
 **Chốt:** ___ ms
 
 ## S-07 — Extract vs Demucs v4
 
-| Bài | vocals (ACE/Demucs) | drums | bass | other |
-| --- | ------------------- | ----- | ---- | ----- |
-| 1   | thua / thắng (P1) | thua / thắng | thua / thắng | thua / thắng (synth) |
-| 2   | thua / thắng | thua / thắng | thua / thắng¹ | thua / thắng (guitar) |
-| 3   | thua / thắng² | thua / thắng | thua / thắng | thua / thắng (synth) |
-| 4   | không chấm được³ | thua / thắng⁴ | thua / thắng⁴ | hòa (guitar) |
-| 5   | thua / thắng | thua / thắng | thua / thắng | không so sánh được⁵ |
+| Bài | vocals (ACE/Demucs) | drums         | bass          | other                 |
+| --- | ------------------- | ------------- | ------------- | --------------------- |
+| 1   | thua / thắng (P1)   | thua / thắng  | thua / thắng  | thua / thắng (synth)  |
+| 2   | thua / thắng        | thua / thắng  | thua / thắng¹ | thua / thắng (guitar) |
+| 3   | thua / thắng²       | thua / thắng  | thua / thắng  | thua / thắng (synth)  |
+| 4   | không chấm được³    | thua / thắng⁴ | thua / thắng⁴ | hòa (guitar)          |
+| 5   | thua / thắng        | thua / thắng  | thua / thắng  | không so sánh được⁵   |
 
 Tổng P1: **Demucs 17 thắng — ACE 0 thắng — 1 hòa — 2 không chấm được**
 (vocals 4-0, drums 5-0, bass 5-0, other 3-0-1-1).
@@ -128,22 +128,22 @@ Tổng P1: **Demucs 17 thắng — ACE 0 thắng — 1 hòa — 2 không chấm 
 ¹ bass rock: ACE gần như toàn bộ instrument; Demucs đúng bass nhưng mờ
 ² vocal electronic: ACE hỏng ("chọp chẹp"); Demucs là vocal đúng
 ³ acoustic/vocals: cả hai bất thường — Demucs nghe "giống cello"; người nghe
-  nghi do export vocal trên nền không có vocal. Chờ P2.
+nghi do export vocal trên nền không có vocal. Chờ P2.
 ⁴ acoustic/drums+bass: bài gốc KHÔNG có drums/bass — Demucs xuất file gần
-  rỗng (đúng), ACE xuất full instrument (sai)
+rỗng (đúng), ACE xuất full instrument (sai)
 ⁵ vietvoc/guitar: bài không có guitar nhưng CẢ HAI đều xuất nội dung — bất
-  thường ở cả hai hệ
+thường ở cả hai hệ
 
 Các file nghe do **ACE-Step base tự sinh** (pop/rock/electronic/acoustic/
 vocal Việt, 30s mỗi bài) — người nghe biết trước giới hạn này.
 
 ## S-08 — Rust audio prototype
 
-| Buffer | xrun trong 30 phút | Latency đo được |
-| ------ | ------------------ | --------------- |
+| Buffer | xrun trong 30 phút | Latency đo được                                                      |
+| ------ | ------------------ | -------------------------------------------------------------------- |
 | 256    | **0**              | 5.3 ms (lý thuyết 256/48kHz — không đo loopback được, cần phần cứng) |
-| 512    | **0**              | 10.7 ms (lý thuyết) |
-| 1024   | **0**              | 21.3 ms (lý thuyết) |
+| 512    | **0**              | 10.7 ms (lý thuyết)                                                  |
+| 1024   | **0**              | 21.3 ms (lý thuyết)                                                  |
 
 `RESULT,S-08,512,30,0` · `RESULT,S-08,256,30,0` · `RESULT,S-08,1024,30,0`
 (dòng gốc từ example). `cargo test -p als-audio` sau khi chạy: 14/14 xanh
@@ -151,14 +151,14 @@ vocal Việt, 30s mỗi bài) — người nghe biết trước giới hạn nà
 
 ## Kill criteria — đánh dấu sau khi đo
 
-| Điều kiện                               | Kích hoạt? | Hệ quả bắt buộc                                                  |
-| --------------------------------------- | ---------- | ---------------------------------------------------------------- |
-| Warm gen 120s > 30s trên GPU mục tiêu   | ✅ KÍCH HOẠT — py pt turbo 48.8–127.4s, cpp 259.5–259.6s; chỉ py-sft sát ngưỡng (28.4s) | Bỏ UX "như nhạc cụ" → render queue + notification                |
-| Rust audio xrun ở buffer 512            | ❌ KHÔNG — 0 xrun/30 phút ở cả 256/512/1024 | Giữ buffer mặc định 512 (10.7 ms); cân nhắc 256 nếu muốn latency thấp hơn |
-| vLLM không native **và** pt chậm hơn 2× | ❌ KHÔNG — vLLM không native là đúng, nhưng pt NHANH HƠN cpp trên GPU 8GB chứ không chậm hơn | Python sống sót qua Phase 0, là ứng viên mặc định                |
-| Vulkan build fail / sai output          | ⚠️ CHƯA ĐÁNH GIÁ ĐƯỢC — SDK không cài nổi trên máy đo (UAC từ chối 3 lần); đây là giới hạn môi trường, KHÔNG phải kết luận kỹ thuật về ace.cpp | Chạy lại trên máy có SDK rồi mới tuyên bố "NVIDIA only"           |
-| Rust audio xrun ở buffer 512            | (S-08 — đang chờ cửa sổ máy yên tĩnh) | Buffer mặc định 1024 hoặc xem lại streaming                      |
-| extract tệ hơn Demucs rõ rệt            | (S-07 — chờ chấm mù 2 phiên) | Demucs làm provider riêng ở Phase 2                              |
+| Điều kiện                               | Kích hoạt?                                                                                                                                     | Hệ quả bắt buộc                                                           |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Warm gen 120s > 30s trên GPU mục tiêu   | ✅ KÍCH HOẠT — py pt turbo 48.8–127.4s, cpp 259.5–259.6s; chỉ py-sft sát ngưỡng (28.4s)                                                        | Bỏ UX "như nhạc cụ" → render queue + notification                         |
+| Rust audio xrun ở buffer 512            | ❌ KHÔNG — 0 xrun/30 phút ở cả 256/512/1024                                                                                                    | Giữ buffer mặc định 512 (10.7 ms); cân nhắc 256 nếu muốn latency thấp hơn |
+| vLLM không native **và** pt chậm hơn 2× | ❌ KHÔNG — vLLM không native là đúng, nhưng pt NHANH HƠN cpp trên GPU 8GB chứ không chậm hơn                                                   | Python sống sót qua Phase 0, là ứng viên mặc định                         |
+| Vulkan build fail / sai output          | ⚠️ CHƯA ĐÁNH GIÁ ĐƯỢC — SDK không cài nổi trên máy đo (UAC từ chối 3 lần); đây là giới hạn môi trường, KHÔNG phải kết luận kỹ thuật về ace.cpp | Chạy lại trên máy có SDK rồi mới tuyên bố "NVIDIA only"                   |
+| Rust audio xrun ở buffer 512            | (S-08 — đang chờ cửa sổ máy yên tĩnh)                                                                                                          | Buffer mặc định 1024 hoặc xem lại streaming                               |
+| extract tệ hơn Demucs rõ rệt            | (S-07 — chờ chấm mù 2 phiên)                                                                                                                   | Demucs làm provider riêng ở Phase 2                                       |
 
 ## Kết luận Phase 0
 

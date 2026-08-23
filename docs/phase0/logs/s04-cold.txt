@@ -6,3 +6,5 @@ cold start (cpp/acestep-v15-turbo): 5.1s
 cpp,acestep-v15-turbo,5.1,7767,1484
 cold start (cpp/acestep-v15-sft): 5.1s
 cpp,acestep-v15-sft,5.1,7781,1407
+py,py,acestep-v15-turbo,39.4,7985,31
+py,py,acestep-v15-sft,0,7958,31
