@@ -1,0 +1,1 @@
+cpp,acestep-v15-sft,30,ABORT>2700s (LM-4B VRAM thrash: DiT 1071s + VAE tiled treo) — chuyển LM-0.6B

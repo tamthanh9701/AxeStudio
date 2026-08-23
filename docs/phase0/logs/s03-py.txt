@@ -1,0 +1,12 @@
+py,acestep-v15-turbo,30,44.6
+py,acestep-v15-turbo,30,18.4
+py,acestep-v15-turbo,120,127.4
+py,acestep-v15-turbo,120,48.8
+py,acestep-v15-turbo,240,48.4
+py,acestep-v15-turbo,240,36.3
+py,acestep-v15-sft,30,18.4
+py,acestep-v15-sft,30,20.7
+py,acestep-v15-sft,120,36.4
+py,acestep-v15-sft,120,28.4
+py,acestep-v15-sft,240,38.5
+py,acestep-v15-sft,240,54.8

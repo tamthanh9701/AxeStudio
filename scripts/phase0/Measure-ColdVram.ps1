@@ -28,6 +28,8 @@ param(
   [string[]]$ArgList = @(),
   [string]$WorkDir,
   [string]$BaseUrl = $(if ($Backend -eq "cpp") { "http://127.0.0.1:8080" } else { "http://127.0.0.1:8001" }),
+  # acestep-api yêu cầu auth: body `ai_token` (auth.py).
+  [string]$ApiKey = "dev-local",
   [int]$DurationS = 120,
   [int]$TimeoutMin = 20
 )
@@ -67,17 +69,30 @@ try {
 
   # ---------- 2. Generate $DurationS s ở background; foreground sample VRAM/RAM ----------
   $steps = if ($Model -like "*turbo*") { 8 } else { 50 }
-  $body = @{
-    task_type       = "text2music"
-    model           = $Model
-    prompt          = "benchmark: cinematic orchestral, strings, taiko"
-    lyrics          = "[Instrumental]"
-    audio_duration  = $DurationS
-    audio_format    = "wav"
-    inference_steps = $steps
-    use_random_seed = $true
-    batch_size      = 1
-  } | ConvertTo-Json
+  if ($Backend -eq "cpp") {
+    # Contract ace-server thật (S-01): caption/duration/seed — xem Bench-Matrix.
+    $body = @{
+      caption         = "benchmark: cinematic orchestral, strings, taiko"
+      lyrics          = "[Instrumental]"
+      duration        = $DurationS
+      inference_steps = $steps
+      batch_size      = 1
+      seed            = Get-Random -Maximum 2147483647
+    } | ConvertTo-Json
+  } else {
+    $body = @{
+      task_type       = "text2music"
+      model           = $Model
+      prompt          = "benchmark: cinematic orchestral, strings, taiko"
+      lyrics          = "[Instrumental]"
+      audio_duration  = $DurationS
+      audio_format    = "wav"
+      inference_steps = $steps
+      use_random_seed = $true
+      batch_size      = 1
+      ai_token        = $ApiKey
+    } | ConvertTo-Json
+  }
 
   $genJob = Start-ThreadJob -ArgumentList $Backend, $BaseUrl, $body {
     param($b, $url, $bodyJson)
@@ -89,17 +104,18 @@ try {
       do {
         Start-Sleep -Seconds 2
         $q = (Invoke-RestMethod -Method Post -Uri "$url/query_result" `
-            -Body (@{ task_id_list = @($taskId) } | ConvertTo-Json) -ContentType "application/json").data[0]
+            -Body (@{ task_id_list = @($taskId); ai_token = "dev-local" } | ConvertTo-Json) -ContentType "application/json").data[0]
       } while ($q.status -eq 0)
       if ($q.status -ne 1) { throw "task failed: $($q.error)" }
     } else {
       # Hai pha cpp: /lm → /synth?wav=1 (giống nhánh cpp của Bench-Matrix.ps1).
       $plan = Invoke-RestMethod -Method Post -Uri "$url/lm" -Body $bodyJson -ContentType "application/json"
+      if (-not $plan.audio_codes) { throw "/lm không trả audio_codes" }
       $synthBody = $bodyJson | ConvertFrom-Json
       $synthBody | Add-Member -NotePropertyName audio_codes -NotePropertyValue $plan.audio_codes
       $resp = Invoke-WebRequest -Method Post -Uri "$url/synth?wav=1" `
-        -Body ($synthBody | ConvertTo-Json -Depth 5) -ContentType "application/json"
-      if (-not $resp.IsSuccessStatusCode) { throw "/synth → HTTP $($resp.StatusCode)" }
+        -Body ($synthBody | ConvertTo-Json) -ContentType "application/json"
+      if ($resp.StatusCode -ge 400) { throw "/synth → HTTP $($resp.StatusCode)" }
     }
   }
 
