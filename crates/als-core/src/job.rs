@@ -55,6 +55,11 @@ pub struct EngineStatus {
     #[specta(type = Option<i32>)]
     pub vram_free_mb: Option<u64>,
     pub queue_depth: u32,
+    /// Provider active LÀM ĐƯỢC gì — UI ẩn/hiện theo đây, CẤM hardcode
+    /// trong component (issue #10 / ALS-F05, AGENTS §7).
+    pub capabilities: Vec<crate::provider_types::Capability>,
+    /// Model provider nhận diện được — dropdown model đọc từ đây.
+    pub models: Vec<crate::provider_types::ModelDescriptor>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]

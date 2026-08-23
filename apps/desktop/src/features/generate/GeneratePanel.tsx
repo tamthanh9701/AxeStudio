@@ -2,7 +2,13 @@ import { useState } from "react"
 import type { GenerationRecipe, ModelTier, TaskType } from "@als/bindings"
 import { explainError, ipc } from "../../ipc/client"
 import { useStudio } from "../../state/store"
-import { lyricsHint, recipeProblems, visibleControls } from "./rules"
+import {
+  availableTasks,
+  availableTiers,
+  lyricsHint,
+  recipeProblems,
+  visibleControls,
+} from "./rules"
 
 export function defaultRecipe(): GenerationRecipe {
   return {
@@ -30,20 +36,27 @@ export function defaultRecipe(): GenerationRecipe {
   }
 }
 
-const MODEL_TIERS: { value: ModelTier; label: string }[] = [
-  { value: "turbo", label: "Turbo — nhanh (8 steps)" },
-  { value: "sft", label: "SFT — chất lượng cao (50 steps)" },
-  { value: "base", label: "Base — extract/lego/complete" },
-]
+/**
+ * LABEL duy nhất — KHÔNG phải nguồn sự thật về tính khả dụng (đó là
+ * engine_status.capabilities/models, issue #10).
+ */
+const TASK_LABEL: Record<TaskType, string> = {
+  text2music: "Text → Music",
+  cover: "Cover",
+  repaint: "Repaint (sửa một vùng)",
+  extract: "Extract stem",
+  lego: "Lego (thêm track)",
+  complete: "Complete",
+}
 
-const TASKS: { value: TaskType; label: string }[] = [
-  { value: "text2music", label: "Text → Music" },
-  { value: "repaint", label: "Repaint (sửa một vùng)" },
-  { value: "cover", label: "Cover" },
-  { value: "extract", label: "Extract stem" },
-  { value: "lego", label: "Lego (thêm track)" },
-  { value: "complete", label: "Complete" },
-]
+const TIER_LABEL: Record<ModelTier, string> = {
+  turbo: "Turbo — nhanh (8 steps)",
+  sft: "SFT — chất lượng cao (50 steps)",
+  base: "Base — extract/lego/complete",
+  xl_turbo: "XL Turbo — nhanh (8 steps)",
+  xl_sft: "XL SFT (50 steps)",
+  xl_base: "XL Base — extract/lego/complete",
+}
 
 function isActive(state: string): boolean {
   return state !== "done" && state !== "failed" && state !== "cancelled"
@@ -78,6 +91,10 @@ export function GeneratePanel() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const snapshot = useStudio((s) => s.snapshot)
+  const engine = useStudio((s) => s.engine)
+  // ALS-F05 (#10): tính khả dụng đọc TỪ engine_status — CẤM hardcode.
+  const availTasks = engine ? availableTasks(engine.capabilities) : []
+  const availTiers = engine ? availableTiers(engine.models) : []
   const vis = visibleControls(recipe.model_tier, recipe.task)
   const hint = lyricsHint(recipe.lyrics)
 
@@ -167,10 +184,15 @@ export function GeneratePanel() {
       <div className="row">
         <label>
           Task
-          <select value={recipe.task} onChange={(e) => patch({ task: e.target.value as TaskType })}>
-            {TASKS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
+          <select
+            value={availTasks.includes(recipe.task) ? recipe.task : (availTasks[0] ?? "")}
+            disabled={availTasks.length === 0}
+            title={availTasks.length === 0 ? "Engine chưa sẵn sàng" : undefined}
+            onChange={(e) => patch({ task: e.target.value as TaskType })}
+          >
+            {availTasks.map((t) => (
+              <option key={t} value={t}>
+                {TASK_LABEL[t]}
               </option>
             ))}
           </select>
@@ -178,16 +200,24 @@ export function GeneratePanel() {
         <label>
           Model
           <select
-            value={recipe.model_tier}
-            disabled={vis.baseOnlyModelLock}
+            value={
+              availTiers.includes(recipe.model_tier)
+                ? recipe.model_tier
+                : vis.baseOnlyModelLock
+                  ? "base"
+                  : (availTiers[0] ?? "")
+            }
+            disabled={vis.baseOnlyModelLock || availTiers.length === 0}
             title={vis.baseOnlyModelLock ? "Task này chỉ chạy trên model base" : undefined}
             onChange={(e) => patch({ model_tier: e.target.value as ModelTier })}
           >
-            {MODEL_TIERS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
+            {(vis.baseOnlyModelLock ? availTiers.filter((t) => t === "base") : availTiers).map(
+              (m) => (
+                <option key={m} value={m}>
+                  {TIER_LABEL[m]}
+                </option>
+              ),
+            )}
           </select>
         </label>
       </div>

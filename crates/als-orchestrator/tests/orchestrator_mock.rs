@@ -325,3 +325,19 @@ async fn warm_defers_until_render_slot_frees() {
     }
     fx.handle.shutdown().await;
 }
+
+#[tokio::test]
+async fn engine_status_carries_capabilities_and_models() {
+    let fx = fixture(0);
+    let st = fx.handle.engine_status().await.unwrap();
+    // ALS-F05 (#10): panel Generate đọc hai danh sách này thay vì hardcode.
+    assert!(
+        st.capabilities
+            .contains(&als_provider::Capability::Text2Music),
+        "mock phải tuyên bố Text2Music"
+    );
+    assert_eq!(st.models.len(), 3, "mock có đủ 3 tier");
+    assert!(st.models.iter().any(|m| m.tier == ModelTier::Turbo));
+    assert!(st.models.iter().all(|m| !m.checksum.is_empty()));
+    fx.handle.shutdown().await;
+}

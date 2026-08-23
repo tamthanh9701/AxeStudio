@@ -4,7 +4,13 @@
  *
  * Nguyên tắc: hiện một control mà kéo không đổi gì là lỗi UX nghiêm trọng.
  */
-import type { GenerationRecipe, ModelTier, TaskType } from "@als/bindings"
+import type {
+  Capability,
+  GenerationRecipe,
+  ModelDescriptor,
+  ModelTier,
+  TaskType,
+} from "@als/bindings"
 
 export interface ControlVisibility {
   /** guidance_scale / shift chỉ có tác dụng trên base (Model Zoo). */
@@ -62,4 +68,44 @@ export function recipeProblems(r: GenerationRecipe): string[] {
   if (["cover", "extract", "lego"].includes(r.task) && r.source_audio === null)
     problems.push("Task này cần audio nguồn")
   return problems
+}
+
+// ---------- ALS-F05 (#10): danh sách khả dụng đọc từ engine_status ----------
+//
+// Nguồn sự thật duy nhất là `EngineStatus.capabilities` / `.models` — CẤM
+// hardcode danh sách task/model trong component (AGENTS §7). Mapping dưới
+// đây mirror `Capability::for_task` ở als-core; giá trị literal khớp serde
+// snake_case và được typecheck chéo với union sinh ra trong generated.ts.
+
+/** Task → capability tương ứng (mirror `Capability::for_task`). */
+const TASK_CAPABILITY: Record<TaskType, Capability> = {
+  text2music: "text2_music",
+  cover: "cover",
+  repaint: "repaint",
+  lego: "lego",
+  extract: "extract",
+  complete: "complete",
+}
+
+export const ALL_TASKS = Object.keys(TASK_CAPABILITY) as TaskType[]
+
+/** Thứ tự ưu tiên hiển thị tier trong dropdown. */
+const TIER_ORDER: ModelTier[] = ["turbo", "xl_turbo", "sft", "xl_sft", "base", "xl_base"]
+
+/**
+ * Task provider active thực sự làm được. Exported vì GeneratePanel và test
+ * cùng dùng một định nghĩa "khả dụng" — đây là ranh giới domain, không phải
+ * wrapper one-line.
+ */
+export function availableTasks(capabilities: readonly Capability[]): TaskType[] {
+  return ALL_TASKS.filter((t) => capabilities.includes(TASK_CAPABILITY[t]))
+}
+
+/**
+ * Tier có model thật phía provider, sắp theo TIER_ORDER để dropdown ổn định
+ * khi backend đổi danh sách trả về.
+ */
+export function availableTiers(models: readonly ModelDescriptor[]): ModelTier[] {
+  const tiers = models.map((m) => m.tier)
+  return TIER_ORDER.filter((t) => tiers.includes(t))
 }

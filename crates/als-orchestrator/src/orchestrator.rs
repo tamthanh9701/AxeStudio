@@ -322,6 +322,10 @@ impl Orchestrator {
                         .unwrap_or_default(),
                     vram_free_mb: None,
                     queue_depth: depth,
+                    // ALS-F05 (#10): panel Generate đọc hai danh sách này
+                    // thay vì hardcode — đổi backend, poll kế tiếp phản ánh.
+                    capabilities: provider.capabilities().to_vec(),
+                    models: provider.models().await.unwrap_or_default(),
                 }));
             }
             OrchCommand::SwitchBackend { provider, resp } => {

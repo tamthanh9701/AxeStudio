@@ -1,64 +1,15 @@
 //! Kiểu dữ liệu đi qua biên provider.
 //!
-//! Kiểu nào xuất hiện trong IPC (engine_status, events) thì derive specta::Type.
-//! Kiểu chỉ sống trong Rust (RenderOutput chứa bytes) thì không cần.
+//! Kiểu dùng chung với IPC (Capability, ModelId, ModelDescriptor) sống ở
+//! als-core — crate này RE-EXPORT lại để chỗ cũ không đổi import (AGENTS §2:
+//! EngineStatus thuộc als-core mà als-core không được phụ thuộc crate nào).
+//! Kiểu chỉ sống trong Rust (RenderOutput chứa bytes) thì không cần specta.
 
-use als_core::{AssetId, GenerationRecipe, JobId, ModelTier, ProviderId, TaskType};
+use als_core::{AssetId, GenerationRecipe, JobId, ProviderId};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Định danh model cụ thể phía provider (vd `acestep-v15-turbo`,
-/// `acestep-v15-turbo-Q8_0.gguf`). Không trùng với ModelTier — tier là trừu tượng,
-/// id là hiện thực.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
-#[serde(transparent)]
-pub struct ModelId(pub String);
-
-impl std::fmt::Display for ModelId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<&str> for ModelId {
-    fn from(s: &str) -> Self {
-        Self(s.to_owned())
-    }
-}
-
-/// Những gì provider làm được. UI đọc danh sách này để ẩn tính năng —
-/// CẤM hardcode trong component.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "snake_case")]
-pub enum Capability {
-    Text2Music,
-    Cover,
-    Repaint,
-    Lego,
-    Extract,
-    Complete,
-    Understand,
-    HotSwapModel,
-    CancelRunningJob,
-    LoraTraining,
-    /// Provider tách được pha LM (plan) và pha DiT (render) thành 2 lời gọi.
-    /// cpp có (`/lm` + `/synth`); py KHÔNG — release_task là single-shot,
-    /// dù nó chấp nhận `audio_code_string` để bỏ qua LM ở lần sau.
-    SplitPlanRender,
-}
-
-impl Capability {
-    pub fn for_task(task: TaskType) -> Self {
-        match task {
-            TaskType::Text2Music => Capability::Text2Music,
-            TaskType::Cover => Capability::Cover,
-            TaskType::Repaint => Capability::Repaint,
-            TaskType::Lego => Capability::Lego,
-            TaskType::Extract => Capability::Extract,
-            TaskType::Complete => Capability::Complete,
-        }
-    }
-}
+pub use als_core::{Capability, ModelDescriptor, ModelId};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Health {
@@ -70,20 +21,6 @@ pub struct Health {
     /// Chi tiết cho trang Diagnostics — không hiển thị ở UI chính.
     pub detail: Option<String>,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
-pub struct ModelDescriptor {
-    pub id: ModelId,
-    pub tier: ModelTier,
-    /// Checksum file trọng số (blake3 hex). Đi vào render_hash — đổi quant
-    /// (Q8_0 → Q4_K_M) đổi checksum → không trả nhầm cache cũ.
-    pub checksum: String,
-    /// specta: u64 bị cấm export — MB luôn < 2^53.
-    #[specta(type = Option<i32>)]
-    pub vram_estimate_mb: Option<u64>,
-    pub warm: bool,
-}
-
 /// Slot nạp model nóng. ACE-Step `/v1/init` nhận slot 1..=3.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 pub struct Slot(pub u8);

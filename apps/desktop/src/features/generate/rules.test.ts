@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { isTurbo, lyricsHint, recipeProblems, visibleControls } from "./rules"
-import type { GenerationRecipe } from "@als/bindings"
+import {
+  availableTasks,
+  availableTiers,
+  isTurbo,
+  lyricsHint,
+  recipeProblems,
+  visibleControls,
+} from "./rules"
+import type { GenerationRecipe, ModelDescriptor } from "@als/bindings"
 
 describe("visibleControls — 6 tổ hợp model × task (ALS-F05)", () => {
   it("turbo + text2music: ẩn guidance/shift, hiện nhóm LM", () => {
@@ -107,5 +114,78 @@ describe("isTurbo", () => {
   it("nhận cả xl_turbo", () => {
     expect(isTurbo("xl_turbo")).toBe(true)
     expect(isTurbo("sft")).toBe(false)
+  })
+})
+
+describe("availableTasks/availableTiers — capability-driven (issue #10)", () => {
+  const CAPS = {
+    text2music: "text2_music",
+    cover: "cover",
+    repaint: "repaint",
+    extract: "extract",
+  } as const
+
+  it("chỉ hiện task provider tuyên bố", () => {
+    const tasks = availableTasks([CAPS.text2music, CAPS.cover])
+    expect(tasks).toEqual(["text2music", "cover"])
+  })
+
+  it("provider đủ 6 task → đủ 6 task khả dụng", () => {
+    const all = [
+      CAPS.text2music,
+      CAPS.cover,
+      CAPS.repaint,
+      "lego",
+      CAPS.extract,
+      "complete",
+    ] as const
+    expect(availableTasks([...all])).toHaveLength(6)
+  })
+
+  it("engine chưa poll xong (rỗng) → không task nào, panel phải disable", () => {
+    expect(availableTasks([])).toEqual([])
+  })
+
+  it("tiers theo thứ tự ưu tiên turbo→sft→base bất kể thứ tự models", () => {
+    const models = [
+      { tier: "base" },
+      { tier: "turbo" },
+      { tier: "sft" },
+    ] as unknown as ModelDescriptor[]
+    expect(availableTiers(models)).toEqual(["turbo", "sft", "base"])
+  })
+
+  it("model lạ (tier ngoài danh sách) bị bỏ qua", () => {
+    const models = [{ tier: "xl_turbo" }] as unknown as ModelDescriptor[]
+    expect(availableTiers(models)).toEqual(["xl_turbo"])
+  })
+})
+
+describe("recipeProblems — chặn giá trị ngoài ngân sách", () => {
+  it("duration 700 bị chặn kèm thông báo (acceptance ALS-F05)", () => {
+    const r: GenerationRecipe = {
+      prompt: "lofi",
+      lyrics: "",
+      duration_s: 700,
+      bpm: null,
+      key_scale: null,
+      time_signature: null,
+      vocal_language: null,
+      task: "text2music",
+      model_tier: "turbo",
+      reference_audio: null,
+      source_audio: null,
+      repaint_range_ms: null,
+      sampling: {
+        seed: null,
+        inference_steps: 8,
+        guidance_scale: null,
+        shift: null,
+        infer_method: "ode",
+        batch_size: 1,
+      },
+      provider_overrides: { lm_backend: null, lm_model: null, extra: {} },
+    }
+    expect(recipeProblems(r)).toContainEqual(expect.stringContaining("Duration"))
   })
 })

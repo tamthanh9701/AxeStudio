@@ -14,6 +14,7 @@ pub mod error;
 pub mod hash;
 pub mod id;
 pub mod job;
+pub mod provider_types;
 pub mod recipe;
 
 pub use canonicalize::{canonicalize, normalize_block, normalize_line, CanonicalizeError};
@@ -29,6 +30,7 @@ pub use hash::{
 };
 pub use id::{AssetId, ClipId, JobId, ProjectId, ProviderId, TakeId, TrackId};
 pub use job::{priority, EngineStatus, ExportFormat, ExportRange, ExportSpec, JobKind, JobState};
+pub use provider_types::{Capability, ModelDescriptor, ModelId};
 pub use recipe::{
     GenerationRecipe, InferMethod, ModelTier, ProviderOverrides, SamplingParams, TaskType,
 };

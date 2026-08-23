@@ -64,6 +64,15 @@ export type CancelOutcome = "cancelled" |
 /**  Job đã dispatch xuống worker, không huỷ được nữa. UI phải nói rõ điều này. */
 "too_late";
 
+/**  Những gì provider làm được. */
+export type Capability = "text2_music" | "cover" | "repaint" | "lego" | "extract" | "complete" | "understand" | "hot_swap_model" | "cancel_running_job" | "lora_training" | 
+/**
+ *  Provider tách được pha LM (plan) và pha DiT (render) thành 2 lời gọi.
+ *  cpp có (`/lm` + `/synth`); py KHÔNG — release_task là single-shot,
+ *  dù nó chấp nhận `audio_code_string` để bỏ qua LM ở lần sau.
+ */
+"split_plan_render";
+
 export type Clip = {
 	id: ClipId,
 	/**  specta: u64 bị cấm export — ms luôn < 2^53 nên `number` là đủ. */
@@ -114,6 +123,13 @@ export type EngineStatus = {
 	/**  specta: u64 bị cấm export — MB luôn < 2^53. */
 	vram_free_mb: number | null,
 	queue_depth: number,
+	/**
+	 *  Provider active LÀM ĐƯỢC gì — UI ẩn/hiện theo đây, CẤM hardcode
+	 *  trong component (issue #10 / ALS-F05, AGENTS §7).
+	 */
+	capabilities: Capability[],
+	/**  Model provider nhận diện được — dropdown model đọc từ đây. */
+	models: ModelDescriptor[],
 };
 
 export type ErrorCode = "PROJECT_NOT_FOUND" | "PROJECT_CORRUPT" | 
@@ -199,6 +215,27 @@ export type JobStateEvent = {
 	state: JobState,
 	error: string | null,
 };
+
+/**  Một model provider nhận diện được (đã cài / biết đường tải). */
+export type ModelDescriptor = {
+	id: ModelId,
+	tier: ModelTier,
+	/**
+	 *  Checksum file trọng số (blake3 hex). Đi vào render_hash — đổi quant
+	 *  (Q8_0 → Q4_K_M) đổi checksum → không trả nhầm cache cũ.
+	 */
+	checksum: string,
+	/**  specta: u64 bị cấm export — MB luôn < 2^53. */
+	vram_estimate_mb: number | null,
+	warm: boolean,
+};
+
+/**
+ *  Định danh model cụ thể phía provider (vd `acestep-v15-turbo`,
+ *  `acestep-v15-turbo-Q8_0.gguf`). Không trùng với [`crate::ModelTier`] —
+ *  tier là trừu tượng, id là hiện thực.
+ */
+export type ModelId = string;
 
 /**
  *  Tier model trừu tượng. Mỗi provider map tier → model id cụ thể
