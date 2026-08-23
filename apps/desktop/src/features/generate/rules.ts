@@ -90,14 +90,7 @@ const TASK_CAPABILITY: Record<TaskType, Capability> = {
 export const ALL_TASKS = Object.keys(TASK_CAPABILITY) as TaskType[]
 
 /** Thứ tự ưu tiên hiển thị tier trong dropdown. */
-const TIER_ORDER: ModelTier[] = [
-  "turbo",
-  "xl_turbo",
-  "sft",
-  "xl_sft",
-  "base",
-  "xl_base",
-]
+const TIER_ORDER: ModelTier[] = ["turbo", "xl_turbo", "sft", "xl_sft", "base", "xl_base"]
 
 /**
  * Task provider active thực sự làm được. Exported vì GeneratePanel và test
