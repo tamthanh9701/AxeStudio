@@ -69,8 +69,15 @@ jobs:
 
   bench:
     # GitHub-hosted không có GPU. Runner này là máy dev tự host.
-    # Không có runner self-hosted thì job này bị skip, KHÔNG được bắt chạy trên windows-latest.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # LƯU Ý cơ chế GitHub Actions: job không khớp runner label thì KẸT
+    # "queued" vô hạn, KHÔNG tự skip như comment cũ từng nghĩ. Vì vậy job
+    # được gate bằng repo variable: chỉ khi bật GPU_BENCH_ENABLED=true
+    # (Settings → Secrets and variables → Actions → Variables) thì job mới
+    # tồn tại; mặc định skip sạch. Bật khi self-hosted runner online.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      vars.GPU_BENCH_ENABLED == 'true'
     runs-on: [self-hosted, windows, gpu]
     steps:
       - uses: actions/checkout@v4
