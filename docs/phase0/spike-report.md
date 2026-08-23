@@ -86,10 +86,10 @@ treo vĩnh viễn ở mức free ≈ 0.04 GB. Xem S-05.
 
 ## S-05 — Hot-swap `/v1/init`
 
-| Chuyển đổi | Thời gian (s) | VRAM đỉnh trong lúc swap |
-| ----------- | ------------------------ |
+| Chuyển đổi  | Thời gian (s)                                             | VRAM đỉnh trong lúc swap              |
+| ----------- | --------------------------------------------------------- | ------------------------------------- |
 | turbo → sft | 36.5 (từ lúc POST /v1/init đến khi gen 30s xác minh xong) | 7738 MB (before 6819 → after 6952 MB) |
-| sft → base | 25.0 (cùng giao thức) | 7396 MB (before 6964 → after 6792 MB) |
+| sft → base  | 25.0 (cùng giao thức)                                     | 7396 MB (before 6964 → after 6792 MB) |
 
 **Kết luận:** hot-swap **DÙNG ĐƯỢC** cho VRAM scheduler — 3 lần swap liên
 tiếp không thấy VRAM tích tụ (6819 → 6952 → 6792 MB, dao động ±130 MB là
@@ -154,10 +154,10 @@ vocal Việt, 30s mỗi bài) — người nghe biết trước giới hạn nà
 | Điều kiện                               | Kích hoạt?                                                                                                                                     | Hệ quả bắt buộc                                                           |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | Warm gen 120s > 30s trên GPU mục tiêu   | ✅ KÍCH HOẠT — py pt turbo 48.8–127.4s, cpp 259.5–259.6s; chỉ py-sft sát ngưỡng (28.4s)                                                        | Bỏ UX "như nhạc cụ" → render queue + notification                         |
-| Rust audio xrun ở buffer 512            | ❌ KHÔNG — 0 xrun/30 phút ở cả 256/512/1024                                                                                                    | Giữ buffer mặc định 512 (10.7 ms); cân nhắc 256 nếu muốn latency thấp hơn |
+| Cold start > 60s                        | ❌ KHÔNG theo health (cpp 5.1s, py 39.4s); first-gen thật còn phụ thuộc lazy-load + model size                                                 | Vẫn nên warm-on-open, không bắt buộc                                      |
 | vLLM không native **và** pt chậm hơn 2× | ❌ KHÔNG — vLLM không native là đúng, nhưng pt NHANH HƠN cpp trên GPU 8GB chứ không chậm hơn                                                   | Python sống sót qua Phase 0, là ứng viên mặc định                         |
 | Vulkan build fail / sai output          | ⚠️ CHƯA ĐÁNH GIÁ ĐƯỢC — SDK không cài nổi trên máy đo (UAC từ chối 3 lần); đây là giới hạn môi trường, KHÔNG phải kết luận kỹ thuật về ace.cpp | Chạy lại trên máy có SDK rồi mới tuyên bố "NVIDIA only"                   |
-| Rust audio xrun ở buffer 512            | (S-08 — đang chờ cửa sổ máy yên tĩnh)                                                                                                          | Buffer mặc định 1024 hoặc xem lại streaming                               |
+| Rust audio xrun ở buffer 512            | ❌ KHÔNG — 0 xrun/30 phút ở cả 256/512/1024                                                                                                    | Giữ buffer mặc định 512 (10.7 ms); cân nhắc 256 nếu muốn latency thấp hơn |
 | extract tệ hơn Demucs rõ rệt            | (S-07 — chờ chấm mù 2 phiên)                                                                                                                   | Demucs làm provider riêng ở Phase 2                                       |
 
 ## Kết luận Phase 0
