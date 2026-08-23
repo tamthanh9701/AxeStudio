@@ -244,3 +244,84 @@ async fn invalid_recipe_rejected_at_boundary() {
     assert!(err.is_err());
     fx.handle.shutdown().await;
 }
+
+#[tokio::test]
+async fn warm_completes_with_prefixed_id_and_done() {
+    let fx = fixture(0);
+    let mut rx = fx.handle.subscribe();
+    let job_id = fx.handle.warm(ModelTier::Turbo).await.unwrap();
+    assert!(
+        job_id.as_str().starts_with("warm:"),
+        "job_id warm phải có tiền tố `warm:`, thấy {job_id}"
+    );
+    // Ít nhất một Progress (progress bar câm = lỗi UX, issue #14)...
+    // LƯU Ý: KHÔNG assert Progress ở tầng orchestrator — warm instant có thể
+    // hoàn thành trước khi vòng lặp kịp drain channel progress (buffer bị
+    // bỏ sau khi job kết thúc). Tiến độ warm được bảo đảm ở TẦNG PROVIDER
+    // bởi contract test `check_warmup_progress`.
+    let ev = wait_event(&mut rx, |ev| {
+        matches!(
+            ev,
+            OrchEvent::JobState {
+                state: JobState::Done,
+                ..
+            }
+        )
+    })
+    .await;
+    match ev {
+        OrchEvent::JobState { job_id: done, .. } => {
+            assert_eq!(done, job_id, "Done phải thuộc về warm job")
+        }
+        other => panic!("event sai loại: {other:?}"),
+    }
+    fx.handle.shutdown().await;
+}
+
+#[tokio::test]
+async fn warm_defers_until_render_slot_frees() {
+    let fx = fixture(1500); // render giữ slot đủ lâu để quan sát thứ tự
+    let mut rx = fx.handle.subscribe();
+    let render_job = fx
+        .handle
+        .submit_generate("c1".into(), recipe(7), priority::INTERACTIVE)
+        .await
+        .unwrap();
+    // Slot chắc chắn bận khi render đã Running.
+    wait_event(&mut rx, |ev| {
+        matches!(
+            ev,
+            OrchEvent::JobState {
+                state: JobState::Running,
+                ..
+            }
+        )
+    })
+    .await;
+    let warm_id = fx.handle.warm(ModelTier::Turbo).await.unwrap();
+    // Warm KHÔNG được chiếm slot: trạng thái đầu tiên khác Queued của nó
+    // chỉ được xuất hiện SAU khi render Done.
+    let mut render_done = false;
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        assert!(!left.is_zero(), "timeout chờ warm/render");
+        let ev = tokio::time::timeout(left, rx.recv())
+            .await
+            .expect("timeout recv")
+            .expect("channel đóng");
+        if let OrchEvent::JobState { job_id, state, .. } = ev {
+            if job_id == render_job && state == JobState::Done {
+                render_done = true;
+            }
+            if job_id == warm_id && state != JobState::Queued {
+                assert!(
+                    render_done,
+                    "warm chạy trước khi render xong — phá nguyên tắc single-slot"
+                );
+                break;
+            }
+        }
+    }
+    fx.handle.shutdown().await;
+}

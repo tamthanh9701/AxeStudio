@@ -40,9 +40,17 @@ export default function App() {
   // Event subscriptions — mount một lần.
   useEffect(() => {
     const subs = [
-      onJobState((e) =>
-        useStudio.getState().patchJob(e.job_id, { state: e.state, error: e.error ?? undefined }),
-      ),
+      onJobState((e) => {
+        useStudio.getState().patchJob(e.job_id, { state: e.state, error: e.error ?? undefined })
+        // Notification cho hàng đợi render (#14): job dài không còn "ẩn" —
+        // thất bại phải nói rõ, không để người dùng chờ vô nghĩa.
+        if (!e.job_id.startsWith("warm:") && e.state === "failed") {
+          setNotice(`Render thất bại: ${e.error ?? "lỗi không rõ"}`)
+        }
+        if (e.job_id.startsWith("warm:") && e.state === "failed") {
+          setNotice("Không nạp sẵn được model — lượt generate đầu sẽ chậm hơn")
+        }
+      }),
       onJobProgress((e) =>
         useStudio.getState().patchJob(e.job_id, { percent: e.percent, stage: e.stage }),
       ),

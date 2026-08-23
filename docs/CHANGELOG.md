@@ -14,5 +14,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/), version theo S
 - Audio engine skeleton: mixer/transport/lock-free commands, golden-buffer + no-alloc tests.
 - Orchestrator: queue bền, 1 job in-flight, postprocess (LUFS + peaks), MockProvider.
 - Phase 0 spike kit: docs/phase0/spike-report.md + scripts/phase0.
+- Warm-on-open (issue #14): model mặc định nạp nóng lúc mở project; warm job
+  `warm:<uuid>` đi qua cùng event queue, tiến độ thật ≤4 lần/s, không chạy song
+  song với render (nguyên tắc 1-model-resident — S-05). Backend mặc định MOCK→PY
+  theo ADR-001.
 
 [Unreleased]: https://github.com/tamthanh9701/AxeStudio/compare/v0.0.0...HEAD

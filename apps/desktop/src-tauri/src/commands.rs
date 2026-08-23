@@ -14,8 +14,8 @@ use crate::state::AppState;
 use als_assets::{AssetStore, PeakMipmap};
 use als_core::{
     priority as job_priority, AssetId, ClipId, EditCommand, EditResult, EngineStatus, ErrorCode,
-    ExportSpec, GenerationRecipe, IpcError, JobId, ProjectSnapshot, ProviderId, TakeId, TakeInfo,
-    UndoStack,
+    ExportSpec, GenerationRecipe, IpcError, JobId, ModelTier, ProjectSnapshot, ProviderId, TakeId,
+    TakeInfo, UndoStack,
 };
 use als_orchestrator::{OrchEvent, OrchestratorHandle};
 use als_project::Project;
@@ -116,14 +116,16 @@ async fn bootstrap_session(state: &State<'_, AppState>, project: Project) -> Cmd
     let assets = AssetStore::new(project.layout.assets_dir())
         .map_err(|e| IpcError::new(ErrorCode::Io, e.to_string()))?;
     let providers = default_providers(&project.layout.assets_dir());
-    // Mock là default cho tới khi Phase 0 chốt backend (ADR-001). Đổi qua
-    // engine_switch_backend hoặc config first-run ở S7.
+    // ADR-001 (Phase 0 chốt 2026-08-22): backend mặc định là Python
+    // acestep-api (lm_backend=pt) — nhanh hơn cpp ở 11/12 ô trên GPU 8GB.
+    // Mock vẫn nằm trong registry cho offline/test, đổi qua engine_switch_backend.
     let handle = als_orchestrator::spawn(
         orch_db,
         assets,
         providers,
-        ProviderId(ProviderId::MOCK.to_owned()),
+        ProviderId(ProviderId::PY.to_owned()),
     )?;
+    let warm = handle.clone();
     forward_events(state.handle().clone(), handle.clone());
     *state.orchestrator.lock().await = Some(handle);
     *state.undo.lock().await = UndoStack::new();
@@ -137,6 +139,15 @@ async fn bootstrap_session(state: &State<'_, AppState>, project: Project) -> Cmd
     // (máy không có thiết bị audio vẫn phải dùng được phần còn lại).
     // Nếu lỗi, lần bấm ▶ đầu tiên sẽ nạp lại qua ensure_engine → refresh (C2).
     let _ = player::refresh(state).await;
+    // Warm-on-open (issue #14): nạp sẵn model mặc định ngay khi mở project
+    // để gen đầu tiên không gánh cold-load 39.4s (S-04). Fire-and-forget —
+    // KHÔNG chặn mở project; server chưa chạy là chuyện bình thường, thất
+    // bại chỉ log + event job:state failed cho UI hiển thị notice nhẹ.
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = warm.warm(ModelTier::Turbo).await {
+            tracing::warn!(error = %e, "warm-on-open thất bại");
+        }
+    });
     Ok(())
 }
 

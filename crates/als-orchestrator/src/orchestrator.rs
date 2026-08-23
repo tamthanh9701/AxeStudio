@@ -6,14 +6,15 @@ use crate::events::OrchEvent;
 use crate::registry::Registry;
 use als_assets::AssetStore;
 use als_core::{
-    plan_hash, render_hash, EngineStatus, GenerationRecipe, JobId, JobKind, JobState, ProviderId,
-    TakeId,
+    plan_hash, render_hash, EngineStatus, GenerationRecipe, JobId, JobKind, JobState, ModelTier,
+    ProviderId, TakeId,
 };
 use als_project::{AssetRow, Db, JobRow, PlanCacheRow, TakeRow};
 use als_provider::{
     CancelOutcome, Capability, JobCtx, ModelDescriptor, PlanInput, PlanOutput, Progress,
-    ProviderError, RenderInput, RenderOutput, RenderProvider,
+    ProviderError, RenderInput, RenderOutput, RenderProvider, Slot,
 };
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -26,30 +27,53 @@ fn now_unix() -> i64 {
         .unwrap_or(0)
 }
 
-type PhaseFuture = Pin<
-    Box<
-        dyn std::future::Future<
-                Output = std::result::Result<(PlanOutput, RenderOutput), ProviderError>,
-            > + Send,
-    >,
->;
-
-/// Job đang chạy: metadata để finish_job còn biết đường ghi cache/take.
-struct InFlight {
-    job_id: JobId,
+/// Metadata render của job đang chạy — finish còn biết đường ghi cache/take.
+/// Warm không có metadata (không sinh take, không đụng cache).
+struct RenderMeta {
     clip_id: String,
     recipe: GenerationRecipe,
     model: ModelDescriptor,
     plan_hash: String,
     plan_cache_hit: bool,
+}
+
+enum Detail {
+    Render(Box<RenderMeta>),
+    Warm,
+}
+
+enum RunOutcome {
+    Render(std::result::Result<(PlanOutput, RenderOutput), ProviderError>),
+    Warm(std::result::Result<(), ProviderError>),
+}
+
+type RunFuture = Pin<Box<dyn Future<Output = RunOutcome> + Send>>;
+
+/// Job đang chiếm slot chạy. LUÔN TUẦN TỰ — warm và render không bao giờ
+/// chạy song song vì acestep-api swap model trong slot sẽ làm hỏng job
+/// đang chạy khác (phát hiện S-05: 1 model resident + swap trong slot).
+struct Current {
+    job_id: JobId,
     cancel: CancellationToken,
-    fut: PhaseFuture,
+    detail: Detail,
+    fut: RunFuture,
 }
 
 #[derive(serde::Deserialize)]
 struct SubmitPayload {
     clip_id: String,
     recipe: GenerationRecipe,
+}
+
+/// Model provider nhận diện được cho tier — dùng chung cho prepare() và
+/// begin_warm(). Lỗi ModelMissing khi provider không có tier đó.
+async fn find_model(provider: &dyn RenderProvider, tier: ModelTier) -> Result<ModelDescriptor> {
+    let models = provider.models().await?;
+    models.into_iter().find(|m| m.tier == tier).ok_or_else(|| {
+        OrchError::Provider(ProviderError::ModelMissing(format!(
+            "không có model tier {tier:?}"
+        )))
+    })
 }
 
 /// Hai pha LM+DiT như MỘT future — với provider non-split (py) plan là opaque
@@ -113,8 +137,12 @@ pub struct Orchestrator {
     assets: AssetStore,
     registry: Registry,
     events: broadcast::Sender<OrchEvent>,
-    current: Option<InFlight>,
+    current: Option<Current>,
     progress_rx: Option<mpsc::Receiver<Progress>>,
+    /// Warm chờ slot rảnh (issue #14). Ưu tiên THẤP hơn render queued:
+    /// job render tự lazy-load model phía server nên warm lúc đó là thừa —
+    /// chỉ start khi queue cạn.
+    pending_warm: Option<(JobId, ModelDescriptor)>,
 }
 
 /// Handle phía IPC (src-tauri). Clone tự do — mọi thứ qua channel.
@@ -157,7 +185,7 @@ impl OrchestratorHandle {
         let (tx, rx) = oneshot::channel();
         self.send(OrchCommand::EngineStatus { resp: tx })?;
         rx.await
-            .map_err(|_| OrchError::NoProvider("orchestrator đã dừng".into()))
+            .map_err(|_| OrchError::NoProvider("orchestrator đã dừng".into()))?
     }
 
     pub async fn switch_backend(&self, provider: ProviderId) -> Result<()> {
@@ -165,6 +193,15 @@ impl OrchestratorHandle {
         self.send(OrchCommand::SwitchBackend { provider, resp: tx })?;
         rx.await
             .map_err(|_| OrchError::NoProvider("orchestrator đã dừng".into()))?
+    }
+
+    /// Warm model cho tier (issue #14). Job_id trả về có tiền tố `warm:` —
+    /// UI lọc để hiển thị banner riêng. Có thể chỉ được XẾP HÀNG khi slot bận.
+    pub async fn warm(&self, tier: ModelTier) -> Result<JobId> {
+        let (tx, rx) = oneshot::channel();
+        self.send(OrchCommand::Warm { tier, resp: tx })?;
+        rx.await
+            .map_err(|_| OrchError::JobNotFound("orchestrator đã dừng".into()))?
     }
 
     pub async fn shutdown(&self) {
@@ -197,6 +234,7 @@ pub fn spawn(
         events: ev_tx.clone(),
         current: None,
         progress_rx: None,
+        pending_warm: None,
     };
     tokio::spawn(orch.run());
     Ok(OrchestratorHandle {
@@ -240,11 +278,18 @@ impl Orchestrator {
                     // move future ra khỏi &mut borrow (E0507).
                     self.current.as_mut().expect("guarded").fut.as_mut().await
                 }, if self.current.is_some() => {
-                    self.finish_job(outcome).await;
+                    self.finish_current(outcome).await;
                 }
             }
             if self.current.is_none() {
                 self.maybe_dispatch().await;
+                // maybe_dispatch VỪA có thể lấy slot — warm chỉ start khi
+                // queue cạn thật sự, không đè lên job render vừa dispatch.
+                if self.current.is_none() {
+                    if let Some((job_id, model)) = self.pending_warm.take() {
+                        self.start_warm(job_id, model);
+                    }
+                }
             }
         }
         tracing::info!("orchestrator dừng");
@@ -269,7 +314,7 @@ impl Orchestrator {
                 let provider = self.registry.active_provider();
                 let health = provider.health().await.ok();
                 let depth = self.db.job_queue_depth().unwrap_or(0);
-                let _ = resp.send(EngineStatus {
+                let _ = resp.send(Ok(EngineStatus {
                     backend: self.registry.active_id(),
                     ready: health.as_ref().map(|h| h.ready).unwrap_or(false),
                     warm_models: health
@@ -277,10 +322,14 @@ impl Orchestrator {
                         .unwrap_or_default(),
                     vram_free_mb: None,
                     queue_depth: depth,
-                });
+                }));
             }
             OrchCommand::SwitchBackend { provider, resp } => {
                 let _ = resp.send(self.registry.set_active(provider));
+            }
+            OrchCommand::Warm { tier, resp } => {
+                let out = self.begin_warm(tier).await;
+                let _ = resp.send(out);
             }
             OrchCommand::Shutdown => {}
         }
@@ -355,8 +404,8 @@ impl Orchestrator {
             };
             let job_id = JobId::from(job.id.clone());
             match self.prepare(&job).await {
-                Ok(Preparation::Started(in_flight)) => {
-                    self.current = Some(*in_flight);
+                Ok(Preparation::Started(cur)) => {
+                    self.current = Some(cur);
                 }
                 Ok(Preparation::CacheHitDone) => continue,
                 Err(e) => {
@@ -366,6 +415,58 @@ impl Orchestrator {
                 }
             }
         }
+    }
+
+    /// Bắt đầu warm cho tier (issue #14). Trả job_id pseudo `warm:<uuid>`
+    /// NGAY — kể cả khi slot bận (khi đó chỉ XẾP HÀNG vào pending_warm và
+    /// emit Queued; UI thấy job đứng ở hàng chờ là đúng sự thật).
+    async fn begin_warm(&mut self, tier: ModelTier) -> Result<JobId> {
+        let provider = self.registry.active_provider();
+        let model = find_model(provider.as_ref(), tier).await?;
+        let job_id = JobId::from(format!("warm:{}", JobId::new()));
+        if self.current.is_some() {
+            // Đè pending cũ — ý định warm MỚI NHẤT thắng.
+            self.pending_warm = Some((job_id.clone(), model));
+            self.emit(OrchEvent::JobState {
+                job_id: job_id.clone(),
+                state: JobState::Queued,
+                error: None,
+            });
+            return Ok(job_id);
+        }
+        self.emit(OrchEvent::JobState {
+            job_id: job_id.clone(),
+            state: JobState::Queued,
+            error: None,
+        });
+        self.start_warm(job_id.clone(), model);
+        Ok(job_id)
+    }
+
+    /// Chiếm slot chạy cho warm. Gọi CHỈ khi current.is_none().
+    fn start_warm(&mut self, job_id: JobId, model: ModelDescriptor) {
+        self.set_job_state(&job_id, JobState::Running, None);
+        let provider = self.registry.active_provider();
+        let (prog_tx, prog_rx) = mpsc::channel(64);
+        let token = CancellationToken::new();
+        let cx = JobCtx {
+            job_id: job_id.clone(),
+            cancel: token.clone(),
+            progress: prog_tx,
+        };
+        // Slot 1: acestep-api hot-swap same-slot đã xác minh ở S-05
+        // (25–37s, không leak VRAM qua 3 lần swap liên tiếp).
+        let fut: RunFuture =
+            Box::pin(
+                async move { RunOutcome::Warm(provider.warmup(&model.id, Slot(1), cx).await) },
+            );
+        self.progress_rx = Some(prog_rx);
+        self.current = Some(Current {
+            job_id,
+            cancel: token,
+            detail: Detail::Warm,
+            fut,
+        });
     }
 
     async fn prepare(&mut self, job: &JobRow) -> Result<Preparation> {
@@ -380,16 +481,7 @@ impl Orchestrator {
                 cap,
             )));
         }
-        let models = provider.models().await?;
-        let model = models
-            .into_iter()
-            .find(|m| m.tier == payload.recipe.model_tier)
-            .ok_or_else(|| {
-                OrchError::Provider(ProviderError::ModelMissing(format!(
-                    "không có model tier {:?}",
-                    payload.recipe.model_tier
-                )))
-            })?;
+        let model = find_model(provider.as_ref(), payload.recipe.model_tier).await?;
 
         // Tầng 2: render_hash.
         let rh = render_hash(
@@ -430,73 +522,85 @@ impl Orchestrator {
         self.set_job_state(&job_id, JobState::Running, None);
         let (prog_tx, prog_rx) = mpsc::channel(64);
         let token = CancellationToken::new();
-        let fut = Box::pin(run_phases(
-            provider,
-            payload.recipe.clone(),
-            plan_opt,
-            model.clone(),
-            job_id.clone(),
-            token.clone(),
-            prog_tx,
-        ));
+        // Clone TRƯỚC khi vào async move — `async move` bắt mọi biến được
+        // dùng bên trong theo move, kể cả khi chỉ gọi .clone() trên chúng.
+        let recipe = payload.recipe.clone();
+        let model_fut = model.clone();
+        let job_id_fut = job_id.clone();
+        let token_fut = token.clone();
+        let fut: RunFuture = Box::pin(async move {
+            let res = run_phases(
+                provider, recipe, plan_opt, model_fut, job_id_fut, token_fut, prog_tx,
+            )
+            .await;
+            RunOutcome::Render(res)
+        });
         self.progress_rx = Some(prog_rx);
-        Ok(Preparation::Started(Box::new(InFlight {
+        Ok(Preparation::Started(Current {
             job_id,
-            clip_id: payload.clip_id,
-            recipe: payload.recipe,
-            model,
-            plan_hash: ph.0,
-            plan_cache_hit: plan_hit,
             cancel: token,
+            detail: Detail::Render(Box::new(RenderMeta {
+                clip_id: payload.clip_id,
+                recipe: payload.recipe,
+                model,
+                plan_hash: ph.0,
+                plan_cache_hit: plan_hit,
+            })),
             fut,
-        })))
+        }))
     }
-
-    async fn finish_job(
-        &mut self,
-        outcome: std::result::Result<(PlanOutput, RenderOutput), ProviderError>,
-    ) {
+    async fn finish_current(&mut self, outcome: RunOutcome) {
         let Some(cur) = self.current.take() else {
             return;
         };
         self.progress_rx = None;
-        match outcome {
-            Ok((plan, out)) => match self.postprocess(&cur, plan, out) {
-                Ok(take_id) => {
-                    self.set_job_state(&cur.job_id, JobState::Done, None);
-                    self.emit(OrchEvent::TakeReady {
-                        job_id: cur.job_id.clone(),
-                        clip_id: cur.clip_id.clone(),
-                        take_id,
-                        cached: false,
-                    });
+        match (outcome, cur.detail) {
+            (RunOutcome::Render(res), Detail::Render(meta)) => match res {
+                Ok((plan, out)) => match self.postprocess(&meta, plan, out) {
+                    Ok(take_id) => {
+                        self.set_job_state(&cur.job_id, JobState::Done, None);
+                        self.emit(OrchEvent::TakeReady {
+                            job_id: cur.job_id.clone(),
+                            clip_id: meta.clip_id.clone(),
+                            take_id,
+                            cached: false,
+                        });
+                    }
+                    Err(e) => {
+                        self.set_job_state(&cur.job_id, JobState::Failed, Some(e.to_string()));
+                    }
+                },
+                Err(ProviderError::Cancelled) => {
+                    self.set_job_state(&cur.job_id, JobState::Cancelled, None);
                 }
                 Err(e) => {
                     self.set_job_state(&cur.job_id, JobState::Failed, Some(e.to_string()));
                 }
             },
-            Err(ProviderError::Cancelled) => {
-                self.set_job_state(&cur.job_id, JobState::Cancelled, None);
-            }
-            Err(e) => {
-                self.set_job_state(&cur.job_id, JobState::Failed, Some(e.to_string()));
-            }
+            (RunOutcome::Warm(res), Detail::Warm) => match res {
+                // Warm pseudo-job KHÔNG nằm trong db — set_job_state ghi
+                // UPDATE 0 row (vô hại) và emit event cho UI.
+                Ok(()) => self.set_job_state(&cur.job_id, JobState::Done, None),
+                Err(ProviderError::Cancelled) => {
+                    self.set_job_state(&cur.job_id, JobState::Cancelled, None);
+                }
+                Err(e) => {
+                    self.set_job_state(&cur.job_id, JobState::Failed, Some(e.to_string()));
+                }
+            },
+            _ => unreachable!("detail và fut không cùng biến thể"),
         }
     }
-
-    /// Render xong: backfill plan_cache → asset store → decode → loudness →
-    /// peaks → take row. Lỗi postprocess = job failed (file đã sinh không bị
-    /// nuốt — nó nằm trong store và tìm lại được bằng render_hash lần sau).
-    ///
-    /// GIỮ HÀM NÀY SYNC: nó không await gì cả, và bắt nó async với `&self`
-    /// và `&InFlight` sẽ phá tính Send của future run() — rusqlite Connection
-    /// (và future trait object trong InFlight) là Send-nhưng-không-Sync.
-    /// Decode/loudness blocking vài chục ms trên task này là chấp nhận được ở
     /// v1; nếu profiler kêu, chuyển phần nặng sang spawn_blocking với owned data.
-    fn postprocess(&self, cur: &InFlight, plan: PlanOutput, out: RenderOutput) -> Result<TakeId> {
+    fn postprocess(
+        &self,
+        meta: &RenderMeta,
+        plan: PlanOutput,
+        out: RenderOutput,
+    ) -> Result<TakeId> {
         // Backfill tầng 1: split provider có codes từ plan(); non-split (py)
         // lấy codes từ response render — re-roll seed lần sau sẽ bỏ qua LM.
-        if !cur.plan_cache_hit {
+        if !meta.plan_cache_hit {
             let codes = if !plan.audio_codes.is_empty() {
                 Some(plan.audio_codes.clone())
             } else {
@@ -504,9 +608,9 @@ impl Orchestrator {
             };
             if let Some(codes) = codes {
                 self.db.plan_put(&PlanCacheRow {
-                    plan_hash: cur.plan_hash.clone(),
+                    plan_hash: meta.plan_hash.clone(),
                     provider_id: self.registry.active_id().to_string(),
-                    model_id: cur.model.id.0.clone(),
+                    model_id: meta.model.id.0.clone(),
                     audio_codes: codes,
                     lyrics: plan.lyrics.clone(),
                     metas_json: plan.metas.to_string(),
@@ -557,14 +661,14 @@ impl Orchestrator {
         let take_id = TakeId::new();
         self.db.take_insert(&TakeRow {
             id: take_id.to_string(),
-            clip_id: cur.clip_id.clone(),
-            recipe_json: serde_json::to_string(&cur.recipe)?,
-            plan_hash: cur.plan_hash.clone(),
+            clip_id: meta.clip_id.clone(),
+            recipe_json: serde_json::to_string(&meta.recipe)?,
+            plan_hash: meta.plan_hash.clone(),
             render_hash: render_hash(
-                &cur.recipe,
+                &meta.recipe,
                 &self.registry.active_id(),
-                &cur.model.id.0,
-                &cur.model.checksum,
+                &meta.model.id.0,
+                &meta.model.checksum,
             )?
             .0,
             asset_id: asset_id.to_string(),
@@ -578,6 +682,6 @@ impl Orchestrator {
 }
 
 enum Preparation {
-    Started(Box<InFlight>),
+    Started(Current),
     CacheHitDone,
 }

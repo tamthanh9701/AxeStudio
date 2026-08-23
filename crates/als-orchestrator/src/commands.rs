@@ -1,5 +1,5 @@
 use crate::error::Result;
-use als_core::{EngineStatus, GenerationRecipe, JobId, ProviderId};
+use als_core::{EngineStatus, GenerationRecipe, JobId, ModelTier, ProviderId};
 use als_provider::CancelOutcome;
 use tokio::sync::oneshot;
 
@@ -17,11 +17,18 @@ pub enum OrchCommand {
         resp: oneshot::Sender<Result<CancelOutcome>>,
     },
     EngineStatus {
-        resp: oneshot::Sender<EngineStatus>,
+        resp: oneshot::Sender<Result<EngineStatus>>,
     },
     SwitchBackend {
         provider: ProviderId,
         resp: oneshot::Sender<Result<()>>,
+    },
+    /// Nạp nóng model cho tier (issue #14). Trả job_id pseudo có tiền tố
+    /// `warm:` để UI phân biệt với job render. Có thể chỉ được XẾP HÀNG —
+    /// khi slot đang bận, warm chạy sau job hiện tại.
+    Warm {
+        tier: ModelTier,
+        resp: oneshot::Sender<Result<JobId>>,
     },
     Shutdown,
 }
