@@ -5,7 +5,7 @@
 //! thuộc fixture trên đĩa, đúng quy ước dev-deps của crate.
 //!
 //! Về test "60 giây": giữ nguyên Ý của ticket (8 file × 60s nội dung phát
-//! SONG SONG, underrun == 0) nhưng kéo nhanh hơn realtime (~5×) — unit CI
+//! SONG SONG, underrun == 0) nhưng kéo nhanh hơn realtime (~2×) — unit CI
 //! không nên ngủ 60s; hành vi realtime đã được spike S-08 chứng minh trên
 //! thiết bị thật.
 //!
@@ -88,12 +88,13 @@ fn eight_files_sixty_seconds_parallel_no_underrun() {
     const SR: u32 = 48_000;
     /// 100ms silence liên tục giữa dòng = underrun nghe được → fail.
     const SILENT_RUN_LIMIT: u64 = 4_800;
-    /// Kéo nhanh hơn realtime bao nhiêu lần (xem doc đầu file). 5× vẫn ép
-    /// worker refill liên tục nhưng chừa headroom cho runner yếu.
-    const SPEEDUP: f64 = 5.0;
-    /// Prime tới khi ring giữ được ít nhất số chunk này (~0.7s audio) —
+    /// Kéo nhanh hơn realtime bao nhiêu lần (xem doc đầu file). 2× là mức
+    /// an toàn cả trên runner 2-vCPU throttled (5× đã đói 2 episode ở đó);
+    /// worker chỉ cần throughput 2× RT × 8 stream.
+    const SPEEDUP: f64 = 2.0;
+    /// Prime tới khi ring giữ được ít nhất số chunk này (~1.4s audio) —
     /// hấp thụ độ trễ lịch của worker trên runner throttled.
-    const PRIME_CHUNKS: usize = 8;
+    const PRIME_CHUNKS: usize = 16;
 
     let bytes = Arc::new(make_wav_bytes(SECONDS, SR));
     let mut readers: Vec<StreamingReader> = Vec::with_capacity(FILES);
@@ -148,7 +149,7 @@ fn eight_files_sixty_seconds_parallel_no_underrun() {
                 }
             }
         }
-        // Giữ lịch ~5× realtime: đi sớm thì nghỉ bớt (≤2ms/lần để burst
+        // Giữ lịch ~2× realtime: đi sớm thì nghỉ bớt (≤2ms/lần để burst
         // không vượt sức chứa ring 2s).
         if let Some(behind) = min_elapsed.checked_sub(started.elapsed()) {
             std::thread::sleep(behind.min(Duration::from_millis(2)));
