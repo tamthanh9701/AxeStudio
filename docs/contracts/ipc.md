@@ -58,8 +58,25 @@ Contract gốc nói "playhead đọc từ `AtomicU64` chia sẻ". Điều đó �
 
 | Command                 | Input             | Output                                                                                                                                          |
 | ----------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `engine_status`         | `()`              | `EngineStatus` — xem bảng payload bên dưới. UI **poll** lệnh này mỗi 2s (một consumer, request nhẹ) — nguồn sự thật duy nhất cho panel Generate |
 | `engine_switch_backend` | `{ provider_id }` | `()`                                                                                                                                            |
 | `engine_warmup`         | —                 | Không có lệnh thủ công ở v1: model được nạp nóng **tự động** khi mở project (issue #14, ADR-001). Lệnh thủ công cân nhắc thêm khi có nhu cầu UI |
+
+**Payload `EngineStatus`** (issue #10 / ALS-F05):
+
+| Field          | Kiểu                | Ý nghĩa                                                                                       |
+| -------------- | ------------------- | --------------------------------------------------------------------------------------------- |
+| `backend`      | `ProviderId`        | Provider đang active                                                                          |
+| `ready`        | `bool`              | Health của provider                                                                           |
+| `warm_models`  | `string[]`          | Model id đã nạp nóng (điền bởi provider)                                                      |
+| `vram_free_mb` | `number?`           | VRAM trống nếu provider báo được                                                              |
+| `queue_depth`  | `number`            | Số job đang chờ trong queue                                                                   |
+| `capabilities` | `Capability[]`      | Provider active LÀM ĐƯỢC gì — UI ẩn/hiện task theo đây, **CẤM** hardcode danh sách task/model |
+| `models`       | `ModelDescriptor[]` | Model provider nhận diện được (id + tier) — dropdown model đọc từ đây                         |
+
+`Capability` và `ModelDescriptor` là kiểu domain dùng chung (als-core), sinh
+sang bindings như mọi kiểu IPC khác. Sau \`engine_switch_backend\`, poll kế
+tiếp (≤2s) phản ánh capabilities/models của backend mới — UI không cần reload.
 
 ### Export
 
