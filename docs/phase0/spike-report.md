@@ -1,6 +1,6 @@
 # Phase 0 — Spike Report
 
-> **Trạng thái: ĐÃ ĐIỀN (còn 2 mục S-06/S-07 chờ phiên nghe thứ hai).**
+> **Trạng thái: ĐÃ ĐIỀN ĐỦ (2026-08-22).**
 >
 > Mỗi ô phải có số đo thực tế kèm cấu hình máy đo (GPU, VRAM, RAM, driver). Đoán = chưa đo.
 
@@ -127,17 +127,40 @@ P1 không phản đối; trùng đúng giá trị fallback đã thống nhất t
 Tổng P1: **Demucs 17 thắng — ACE 0 thắng — 1 hòa — 2 không chấm được**
 (vocals 4-0, drums 5-0, bass 5-0, other 3-0-1-1).
 
+**Phiên 2 (P2 — xáo trộn mới):** **Demucs 17 thắng — ACE 1 thắng —
+2 không chấm được** (vocals 5-0, drums 4-1, bass 5-0, other 3-0).
+
 ¹ bass rock: ACE gần như toàn bộ instrument; Demucs đúng bass nhưng mờ
 ² vocal electronic: ACE hỏng ("chọp chẹp"); Demucs là vocal đúng
-³ acoustic/vocals: cả hai bất thường — Demucs nghe "giống cello"; người nghe
-nghi do export vocal trên nền không có vocal. Chờ P2.
+³ acoustic/vocals: P1 cả hai bất thường ("giống cello"); P2 vẫn "cello"
+nhưng người nghe chấm được — Demucs vẫn thắng
 ⁴ acoustic/drums+bass: bài gốc KHÔNG có drums/bass — Demucs xuất file gần
-rỗng (đúng), ACE xuất full instrument (sai)
+rỗng (đúng), ACE xuất full instrument (sai). P2: acoustic/bass lần này
+ACE xuất rỗng đúng (khác P1) — hành vi ACE extract không ổn định
 ⁵ vietvoc/guitar: bài không có guitar nhưng CẢ HAI đều xuất nội dung — bất
-thường ở cả hai hệ
+thường ở cả hai hệ, cả P1 lẫn P2
+
+### Gộp 2 phiên (18 cặp chấm được ở cả hai)
+
+| Stem                 | ACE thắng | Demucs thắng |
+| -------------------- | --------- | ------------ |
+| vocals               | 0         | 9            |
+| drums                | 1         | 9            |
+| bass                 | 0         | 10           |
+| other (synth/guitar) | 0         | 6            |
+| **Tổng**             | **1**     | **34**       |
+
+Nhất quán liên-person-session: 17/18 cặp cùng chiều (flip duy nhất:
+pop/drums P2 — người nghe ưu tiên bản full thay vì drums-only, ngược với
+tiêu chuẩn của chính họ ở P1; xem như nhiễu).
 
 Các file nghe do **ACE-Step base tự sinh** (pop/rock/electronic/acoustic/
 vocal Việt, 30s mỗi bài) — người nghe biết trước giới hạn này.
+
+**Kết luận:** ACE-Step `extract` thua Demucs v4 **rõ ràng và nhất quán**
+(34–1, thua ở cả 4 nhóm stem, vượt ngưỡng "≥2 loại stem kém hơn hẳn").
+→ Kill criterion kích hoạt: **Phase 2 cần Demucs làm provider tách stem
+riêng.** ACE extract chỉ dùng được khi không có phương án nào khác.
 
 ## S-08 — Rust audio prototype
 
@@ -160,7 +183,7 @@ vocal Việt, 30s mỗi bài) — người nghe biết trước giới hạn nà
 | vLLM không native **và** pt chậm hơn 2× | ❌ KHÔNG — vLLM không native là đúng, nhưng pt NHANH HƠN cpp trên GPU 8GB chứ không chậm hơn                                                   | Python sống sót qua Phase 0, là ứng viên mặc định                         |
 | Vulkan build fail / sai output          | ⚠️ CHƯA ĐÁNH GIÁ ĐƯỢC — SDK không cài nổi trên máy đo (UAC từ chối 3 lần); đây là giới hạn môi trường, KHÔNG phải kết luận kỹ thuật về ace.cpp | Chạy lại trên máy có SDK rồi mới tuyên bố "NVIDIA only"                   |
 | Rust audio xrun ở buffer 512            | ❌ KHÔNG — 0 xrun/30 phút ở cả 256/512/1024                                                                                                    | Giữ buffer mặc định 512 (10.7 ms); cân nhắc 256 nếu muốn latency thấp hơn |
-| extract tệ hơn Demucs rõ rệt            | (S-07 — chờ chấm mù 2 phiên)                                                                                                                   | Demucs làm provider riêng ở Phase 2                                       |
+| extract tệ hơn Demucs rõ rệt            | ✅ KÍCH HOẠT — gộp 2 phiên: Demucs 34 thắng, ACE 1, thua ở cả 4 nhóm stem                                                                      | Demucs làm provider tách stem riêng ở Phase 2                             |
 
 ## Kết luận Phase 0
 
