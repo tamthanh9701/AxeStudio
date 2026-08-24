@@ -78,7 +78,7 @@ impl AcestepApiClient {
         }
     }
 
-    /// Unwrap `{ data, code, error }`. code != 0 → Worker error.
+    /// Unwrap `{ data, code, error }`. code lạ → Worker error.
     async fn unwrap<T: for<'de> Deserialize<'de>>(
         &self,
         res: reqwest::Response,
@@ -100,11 +100,7 @@ impl AcestepApiClient {
         if let Some(err) = w.error.filter(|e| !e.is_empty()) {
             return Err(ProviderError::Worker(format!("{endpoint}: {err}")));
         }
-        if let Some(code) = w.code {
-            if code != 0 {
-                return Err(ProviderError::Worker(format!("{endpoint}: code={code}")));
-            }
-        }
+        ensure_success_code(w.code, endpoint)?;
         w.data
             .ok_or_else(|| ProviderError::InvalidResponse(format!("{endpoint}: data null")))
     }
@@ -181,5 +177,35 @@ impl AcestepApiClient {
             .await
             .map_err(|e| ProviderError::Http(e.to_string()))?;
         self.unwrap(res, "/v1/init").await
+    }
+}
+
+/// Server THẬT trả `code: 200` khi thành công (xác nhận trên máy đo
+/// 2026-08-24 — trước đây unwrap đòi code=0 khiến MỌI response hợp lệ bị
+/// từ chối, chặn warm + generate: issue #14). Docs ghi 0 — chấp nhận cả hai.
+fn ensure_success_code(code: Option<i64>, endpoint: &str) -> Result<()> {
+    match code {
+        None => Ok(()),
+        Some(c) if c == 0 || c == 200 => Ok(()),
+        Some(c) => Err(ProviderError::Worker(format!("{endpoint}: code={c}"))),
+    }
+}
+
+#[cfg(test)]
+mod code_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_zero_and_200_and_missing() {
+        assert!(ensure_success_code(Some(0), "/x").is_ok());
+        assert!(ensure_success_code(Some(200), "/x").is_ok());
+        assert!(ensure_success_code(None, "/x").is_ok());
+    }
+
+    #[test]
+    fn rejects_other_codes_with_endpoint_context() {
+        let e = ensure_success_code(Some(404), "/release_task").unwrap_err();
+        assert!(e.to_string().contains("/release_task"));
+        assert!(e.to_string().contains("code=404"));
     }
 }
