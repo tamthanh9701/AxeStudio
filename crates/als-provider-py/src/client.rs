@@ -32,8 +32,12 @@ pub struct TaskResult {
     pub task_id: String,
     /// 0 = queued/running, 1 = succeeded, 2 = failed (docs/en/API.md).
     pub status: i64,
-    /// TODO(S-02): xác nhận tên field chứa đường dẫn file kết quả —
-    /// API.md ghi `result_json` là CHUỖI JSON lồng bên trong.
+    /// Server THẬT (xác nhận máy đo 2026-08-24): payload nằm trong field
+    /// `result` — MỘT CHUỖI JSON lồng dạng
+    /// `[{"file": "/v1/audio?path=C%3A%5C…mp3", "status": 1, …}]`.
+    #[serde(default)]
+    pub result: Option<String>,
+    /// docs/en/API.md ghi tên là `result_json` — chấp nhận cả hai tên.
     #[serde(default)]
     pub result_json: Option<String>,
     #[serde(default)]
@@ -48,6 +52,12 @@ impl TaskResult {
             2 => TaskStatus::Failed,
             other => TaskStatus::Unknown(other),
         }
+    }
+
+    /// Chuỗi JSON lồng chứa kết quả — ưu tiên `result` (server thật),
+    /// fallback `result_json` (docs).
+    pub fn inner(&self) -> Option<&str> {
+        self.result.as_deref().or(self.result_json.as_deref())
     }
 }
 
@@ -137,11 +147,18 @@ impl AcestepApiClient {
             .ok_or_else(|| ProviderError::InvalidResponse("query_result rỗng".into()))
     }
 
-    /// GET /v1/audio?path=... — tải file kết quả.
-    pub async fn download_audio(&self, path: &str) -> Result<Vec<u8>> {
+    /// Tải file kết quả. `file` từ server là ENDPOINT đầy đủ kèm query đã
+    /// percent-encoded ("/v1/audio?path=C%3A%5C…mp3") — dùng NGUYÊN VĂN
+    /// (server tự decode; decode/re-encode phía client sẽ phá query).
+    /// Chuỗi trần không có prefix → coi là path thuần, ghép qua query.
+    pub async fn download_audio(&self, file: &str) -> Result<Vec<u8>> {
+        let url = if file.starts_with('/') {
+            format!("{}{}", self.base, file)
+        } else {
+            format!("{}/v1/audio?path={}", self.base, file)
+        };
         let res = self
-            .authed(self.http.get(format!("{}/v1/audio", self.base)))
-            .query(&[("path", path)])
+            .authed(self.http.get(url))
             .send()
             .await
             .map_err(|e| ProviderError::Http(e.to_string()))?;

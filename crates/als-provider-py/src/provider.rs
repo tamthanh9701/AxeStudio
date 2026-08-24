@@ -96,19 +96,41 @@ impl PyProvider {
 /// mốc ước lượng tiến độ khi server không trả task handle cho /v1/init.
 const WARM_ESTIMATE: Duration = Duration::from_secs(30);
 
-/// Trích đường dẫn file audio + audio_codes từ result_json.
-/// TODO(S-02): xác nhận schema thật của result_json trên server chạy thật.
-fn parse_result(result_json: &str) -> Result<(String, Option<String>)> {
-    let v: serde_json::Value = serde_json::from_str(result_json)
-        .map_err(|e| ProviderError::InvalidResponse(format!("result_json: {e}")))?;
-    // Chấp nhận vài hình dạng: "file", "audio", "files[0]", "outputs[0]".
+/// Trích đường dẫn file audio + audio_codes từ chuỗi JSON lồng của
+/// `TaskResult::inner()`.
+///
+/// Shape SERVER THẬT (xác nhận máy đo 2026-08-24) là MẢNG:
+/// `[{"file": "/v1/audio?path=C%3A%5C…mp3", "status": 1, …}]`.
+/// Vẫn chấp nhận object đơn + các key cũ (file/audio/audio_path/path/
+/// files/outputs) để không vỡ với docs.
+fn parse_result(inner: &str) -> Result<(String, Option<String>)> {
+    let v: serde_json::Value = serde_json::from_str(inner)
+        .map_err(|e| ProviderError::InvalidResponse(format!("result: {e}")))?;
+    // Mảng → lấy phần tử đầu; object → dùng nguyên.
+    let owned;
+    let item = if v.is_array() {
+        owned = v
+            .as_array()
+            .and_then(|a| a.first())
+            .cloned()
+            .ok_or_else(|| {
+                ProviderError::InvalidResponse("result là mảng rỗng — không có output".into())
+            })?;
+        &owned
+    } else {
+        &v
+    };
+
+    // "file" trả dạng ENDPOINT đầy đủ kèm query đã encode:
+    // "/v1/audio?path=C%3A%5C…mp3" — dùng NGUYÊN VĂN làm path request
+    // (server tự decode query của nó; decode phía client sẽ phá query).
     let path = ["file", "audio", "audio_path", "path"]
         .iter()
-        .find_map(|k| v.get(k).and_then(|x| x.as_str()))
+        .find_map(|k| item.get(k).and_then(|x| x.as_str()))
         .map(str::to_owned)
         .or_else(|| {
-            v.get("files")
-                .or_else(|| v.get("outputs"))
+            item.get("files")
+                .or_else(|| item.get("outputs"))
                 .and_then(|x| x.as_array())
                 .and_then(|a| a.first())
                 .and_then(|x| x.as_str())
@@ -116,13 +138,13 @@ fn parse_result(result_json: &str) -> Result<(String, Option<String>)> {
         })
         .ok_or_else(|| {
             ProviderError::InvalidResponse(format!(
-                "result_json không có đường dẫn audio: {}",
-                &result_json[..result_json.len().min(256)]
+                "result không có đường dẫn audio: {}",
+                &inner[..inner.len().min(256)]
             ))
         })?;
-    let codes = v
+    let codes = item
         .get("audio_code_string")
-        .or_else(|| v.get("audio_codes"))
+        .or_else(|| item.get("audio_codes"))
         .and_then(|x| x.as_str())
         .map(str::to_owned);
     Ok((path, codes))
@@ -217,10 +239,12 @@ impl RenderProvider for PyProvider {
                     cx.report(pct, ProgressStage::Rendering).await;
                 }
                 TaskStatus::Succeeded => {
-                    let rj = res.result_json.ok_or_else(|| {
-                        ProviderError::InvalidResponse("succeeded nhưng thiếu result_json".into())
+                    let inner = res.inner().ok_or_else(|| {
+                        ProviderError::InvalidResponse(
+                            "succeeded nhưng thiếu result/result_json".into(),
+                        )
                     })?;
-                    break parse_result(&rj)?;
+                    break parse_result(inner)?;
                 }
                 TaskStatus::Failed => {
                     return Err(ProviderError::Worker(
@@ -287,6 +311,7 @@ impl RenderProvider for PyProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::TaskResult;
 
     #[test]
     fn py_declares_no_split_and_no_cancel() {
@@ -310,5 +335,32 @@ mod tests {
         let (path, _) = parse_result(r#"{"files": ["/out/b.wav"]}"#).unwrap();
         assert_eq!(path, "/out/b.wav");
         assert!(parse_result(r#"{"nothing": 1}"#).is_err());
+    }
+
+    #[test]
+    fn parses_real_server_array_shape() {
+        // Shape thật từ máy đo 2026-08-24 (issue #14): MẢNG + file là
+        // ENDPOINT đầy đủ kèm query percent-encoded — phải giữ nguyên văn.
+        let raw = r#"[{"file": "/v1/audio?path=C%3A%5Ctmp%5Cout.mp3", "status": 1}] "#;
+        let (path, _) = parse_result(raw).unwrap();
+        assert_eq!(path, "/v1/audio?path=C%3A%5Ctmp%5Cout.mp3");
+    }
+
+    #[test]
+    fn empty_result_array_is_error_not_panic() {
+        // Server trả mảng rỗng khi không có output nào — lỗi rõ, không panic.
+        assert!(parse_result("[]").is_err());
+    }
+
+    #[test]
+    fn taskresult_inner_prefers_result_over_docs_name() {
+        let with_both: TaskResult = serde_json::from_str(
+            r#"{"task_id":"t","status":1,"result":"[1]","result_json":"[2]"}"#,
+        )
+        .unwrap();
+        assert_eq!(with_both.inner(), Some("[1]"));
+        let docs_only: TaskResult =
+            serde_json::from_str(r#"{"task_id":"t","status":1,"result_json":"[2]"}"#).unwrap();
+        assert_eq!(docs_only.inner(), Some("[2]"));
     }
 }
