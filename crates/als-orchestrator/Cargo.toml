@@ -20,3 +20,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[[bench]]
+name = "cache_hit"
+harness = false

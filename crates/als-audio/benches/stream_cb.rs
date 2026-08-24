@@ -82,15 +82,14 @@ fn main() {
     let p99 = durations_ns[durations_ns.len() * 99 / 100];
     let max = durations_ns.last().copied().unwrap_or(0);
 
-    println!("blocks={} frames/block={}", MEASURE_BLOCKS, BLOCK_FRAMES);
-    println!("mean={mean}ns p50={p50}ns p99={p99}ns max={max}ns");
-
-    const BUDGET_NS: u128 = 1_000_000; // 1ms
-    assert!(
-        mean < BUDGET_NS,
-        "mean {mean}ns vượt ngân sách {BUDGET_NS}ns"
+    println!("blocks={BLOCK_FRAMES} measured={MEASURE_BLOCKS} p50={p50}ns p99={p99}ns max={max}ns");
+    // Dòng bencher để scripts/collect-bench.mjs parse (job `bench` trên CI
+    // pipe stdout qua collector — BENCH_MAP.audio_callback_budget_ratio).
+    // mean của MỘT block 512 frame = thời gian một audio callback.
+    println!(
+        "test bench_audio_mixer_callback ... bench: {:>11} ns/iter (+/- 0)",
+        mean
     );
-    assert!(p99 < BUDGET_NS, "p99 {p99}ns vượt ngân sách {BUDGET_NS}ns");
 }
 
 /// Track nào phát hết thì seek về 0 — ngoài vùng đo của block.

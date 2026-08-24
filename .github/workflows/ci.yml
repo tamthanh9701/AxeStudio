@@ -85,8 +85,22 @@ jobs:
       # cargo bench ghi bencher ra stdout; collect-bench gom thành perf-report.json.
       # Chỉ số đo ngoài cargo (timeline fps, cold start...) bổ sung qua --extra
       # khi các sprint tương ứng viết script đo của chúng.
+      # --output-format bencher KHÔNG truyền được qua `--` cho toàn workspace:
+      # unit-test harness chỉ nhận pretty|terse|json → chết target đầu tiên.
+      # Chạy đích danh từng bench (harness=false, tự in dòng bencher).
       - name: cargo bench → perf-report.json
         shell: pwsh
-        run: cargo bench --workspace -- --output-format bencher | node scripts/collect-bench.mjs
+        run: |
+          $benches = @(
+            "als-audio/stream_cb",
+            "als-assets/peaks_3min",
+            "als-orchestrator/cache_hit"
+          )
+          $all = ""
+          foreach ($b in $benches) {
+            $pkg, $name = $b.Split("/")
+            $all += (cargo bench -p $pkg --bench $name 2>$null | Out-String)
+          }
+          $all | node scripts/collect-bench.mjs
       - name: Soi ngân sách hiệu năng
         run: node scripts/bench-perf-budget.mjs
