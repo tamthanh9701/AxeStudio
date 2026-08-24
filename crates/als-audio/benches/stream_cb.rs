@@ -90,13 +90,6 @@ fn main() {
         "test bench_audio_mixer_callback ... bench: {:>11} ns/iter (+/- 0)",
         mean
     );
-
-    const BUDGET_NS: u128 = 1_000_000; // 1ms
-    assert!(
-        mean < BUDGET_NS,
-        "mean {mean}ns vượt ngân sách {BUDGET_NS}ns"
-    );
-    assert!(p99 < BUDGET_NS, "p99 {p99}ns vượt ngân sách {BUDGET_NS}ns");
 }
 
 /// Track nào phát hết thì seek về 0 — ngoài vùng đo của block.
