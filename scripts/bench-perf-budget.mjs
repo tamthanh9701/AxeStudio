@@ -22,6 +22,20 @@ const BUDGETS = {
   idle_ram_mb: { max: 600 },
 }
 
+// Chỉ số CHƯA có script đo (sprint tương ứng chưa đến — collector đọc qua
+// --extra). Được phép thiếu mà không fail, nhưng KHÔNG bị xoá âm thầm:
+// sprint nào viết xong script đo thì xoá key khỏi danh sách này trong
+// chính PR đó. Quyết định 2026-08-24 sau khi bench job chạy thật lần đầu
+// (runner axe-gpu-runner) — gate phải xanh trên những gì đang tồn tại.
+const PENDING_KEYS = new Set([
+  "timeline_fps", // Sprint timeline (Pixi ticker)
+  "xrun_30min", // cần thiết bị audio thật + soak script (S-08 đã chứng minh thủ công)
+  "cold_start_ms", // Sprint first-run experience
+  "project_open_50clip_ms", // cần fixture project 50 clip
+  "reroll_seed_ratio", // orchestrator bench — làm cùng ticket cache-hit nếu profiler kêu
+  "idle_ram_mb", // cần app build release chạy 60s idle
+])
+
 const reportPath = process.argv[2] ?? "perf-report.json"
 if (!fs.existsSync(reportPath)) {
   console.error(`Không thấy ${reportPath} — bench chưa chạy, không đánh giá được.`)
@@ -35,8 +49,12 @@ let missing = 0
 for (const [key, budget] of Object.entries(BUDGETS)) {
   const actual = report[key]
   if (actual === undefined) {
-    console.warn(`? ${key}: thiếu số đo trong report`)
-    missing++
+    if (PENDING_KEYS.has(key)) {
+      console.log(`⏳ ${key}: pending — sprint tương ứng chưa có script đo`)
+    } else {
+      console.warn(`? ${key}: thiếu số đo trong report`)
+      missing++
+    }
     continue
   }
   const ok = budget.min !== undefined ? actual >= budget.min : actual <= budget.max
