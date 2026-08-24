@@ -16,10 +16,10 @@
 
 ## S-01 — Build acestep.cpp
 
-| Backend | Build được?                                                                                                                                         | Binary chạy?                                                                             | Ghi chú                                                                                                                                                                                                                          |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CUDA    | ✅ (CMake 3.31 + Ninja, nvcc 13.3, 183/183 target)                                                                                                  | ✅ `ace-server.exe` — `/props` 200, `/understand` 200, `/lm`+`/synth?wav=1` trả WAV RIFF | Log: `docs/phase0/logs/s01-cuda.txt`. Submodule pin `acestep.vst3@b04bf8a` (ggml@4d74a9a8). Lưu ý runtime: cần `cublas64_13.dll`/`cublasLt64_13.dll` (CUDA bin/x64) + shim `cudart_hybrid64.dll` (copy của cudart64_13) cạnh exe |
-| Vulkan  | ❌ — chưa đo được trên máy này: Vulkan SDK installer (winget/LunarG) cần UAC elevation và bị từ chối/hết hạn 3 lần; bản zip LunarG thực chất là EXE | —                                                                                        | Chưa phải kết luận kỹ thuật về code — là giới hạn môi trường đo. Cần máy/cài SDK rồi chạy lại trước khi tuyên bố "NVIDIA only"                                                                                                   |
+| Backend | Build được?                                                                                             | Binary chạy?                                                                                                    | Ghi chú                                                                                                                                                                                                                                                                                           |
+| ------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CUDA    | ✅ (CMake 3.31 + Ninja, nvcc 13.3, 183/183 target)                                                      | ✅ `ace-server.exe` — `/props` 200, `/understand` 200, `/lm`+`/synth?wav=1` trả WAV RIFF                        | Log: `docs/phase0/logs/s01-cuda.txt`. Submodule pin `acestep.vst3@b04bf8a` (ggml@4d74a9a8). Lưu ý runtime: cần `cublas64_13.dll`/`cublasLt64_13.dll` (CUDA bin/x64) + shim `cudart_hybrid64.dll` (copy của cudart64_13) cạnh exe                                                                  |
+| Vulkan  | ✅ (SDK 1.4.357.0 cài thành công ở lần thử thứ 4 — UAC được duyệt; CMake+Ninja, 369/369 target, ~2m43s) | ✅ binary chạy — `/props` 200, gen turbo/10s: `/lm` 200 (10.4s) + `/synth?wav=1` 200 (65.6s) → RIFF 8.8s HỢP LỆ | Log: `docs/phase0/logs/s01-vulkan-build.txt` + `s01-vulkan.txt`. Gen 30s+ CRASH hard (exit 2147483647) tại VAE tiled decode: `ErrorOutOfDeviceMemory` cấp phát 880MB + reserve 1.76GB — VRAM free <2.6GB (nền máy 3.2–5.4GB sau leak của process crash). 2/2 lần crash deterministic tại cùng pha |
 
 ## S-02 — Python ACE-Step 1.5 native Windows
 
@@ -33,18 +33,25 @@
 
 Thời gian sinh (giây), warm model:
 
-|             | cpp CUDA      | cpp Vulkan | python pt    | python vllm                                                      |
-| ----------- | ------------- | ---------- | ------------ | ---------------------------------------------------------------- |
-| turbo, 30s  | 57.2 / 61.5   | ❌         | 44.6 / 18.4  | ❌ vllm không có trên Windows — server tự fallback pt (xem S-02) |
-| turbo, 120s | 259.5 / 259.6 | ❌         | 127.4 / 48.8 | ❌ (fallback pt)                                                 |
-| turbo, 240s | 519.3 / 519.6 | ❌         | 48.4 / 36.3  | ❌ (fallback pt)                                                 |
-| sft, 30s    | 8.4 / 7.6     | ❌         | 18.4 / 20.7  | ❌ (fallback pt)                                                 |
-| sft, 120s   | 131.7 / 183.0 | ❌         | 36.4 / 28.4  | ❌ (fallback pt)                                                 |
-| sft, 240s   | 409.9 / 407.5 | ❌         | 38.5 / 54.8  | ❌ (fallback pt)                                                 |
+|             | cpp CUDA      | cpp Vulkan    | python pt    | python vllm                                                      |
+| ----------- | ------------- | ------------- | ------------ | ---------------------------------------------------------------- |
+| turbo, 30s  | 57.2 / 61.5   | ❌ OOM crash² | 44.6 / 18.4  | ❌ vllm không có trên Windows — server tự fallback pt (xem S-02) |
+| turbo, 120s | 259.5 / 259.6 | ❌ OOM crash² | 127.4 / 48.8 | ❌ (fallback pt)                                                 |
+| turbo, 240s | 519.3 / 519.6 | ❌ OOM crash² | 48.4 / 36.3  | ❌ (fallback pt)                                                 |
+| sft, 30s    | 8.4 / 7.6     | ❌ OOM crash² | 18.4 / 20.7  | ❌ (fallback pt)                                                 |
+| sft, 120s   | 131.7 / 183.0 | ❌ OOM crash² | 36.4 / 28.4  | ❌ (fallback pt)                                                 |
+| sft, 240s   | 409.9 / 407.5 | ❌ OOM crash² | 38.5 / 54.8  | ❌ (fallback pt)                                                 |
 
 **Cấu hình cột cpp:** LM-0.6B Q8_0 — giống hệt LM mà phía py tự chọn (auto
 tier) → so sánh công bằng backend. VAE decode của cpp chiếm phần lớn thời
 gian và tỉ lệ tuyến tính với duration (~1.7s VAE / 1s audio).
+
+**Cột cpp Vulkan:** build ✅ + gen 10s ✅ (RIFF hợp lệ), nhưng cell 30s đầu
+tiên crash hard (exit 2147483647) tại VAE tiled decode — `ErrorOutOfDeviceMemory`
+cấp phát 880MB + reserve 1.76GB khi VRAM free <2.6GB (nền desktop 3.2GB, sau
+khi đóng app + leak 5.4GB từ process crash). 2/2 lần deterministic. DiT chạy
+tốt (12.1s/30s audio). Không đo được ma trận trên máy này — cần GPU ≥12GB
+hoặc desktop sạch tuyệt đối sau reboot. Chi tiết: `docs/phase0/logs/s01-vulkan.txt`.
 
 **Tham chiếu cấu hình ship mặc định của ace.cpp (LM-4B Q8_0, ~7.7GB bộ
 model):** turbo 30s = 60.1/61.5 — tương đương; từ 120s trở lên sụp đổ vì
@@ -66,7 +73,7 @@ trạng, không làm tròn lên (issue #2).
 | Backend     | Cold start (s)                                     | Warm gen 120s (s)                                       | Peak VRAM turbo | Peak VRAM sft | RAM host đỉnh                                                      |
 | ----------- | -------------------------------------------------- | ------------------------------------------------------- | --------------- | ------------- | ------------------------------------------------------------------ |
 | cpp CUDA    | 5.1 (/props — model nạp lazy theo request đầu)     | ≈260 (S-03, LM-0.6B)                                    | 7767 MB         | 7781 MB       | 1484 / 1407 MB                                                     |
-| cpp Vulkan  | ❌                                                 | ❌                                                      | ❌              | ❌            | ❌                                                                 |
+| cpp Vulkan  | server boot OK (7.5s)                              | ❌ crash OOM tại cell 30s                               | ❌              | ❌            | ❌                                                                 |
 | python pt   | 39.4 (/v1/models — weights lazy-load theo job đầu) | turbo: hoàn thành trong window; sft: 36.4 / 28.4 (S-03) | 7985 MB         | 7958 MB       | ⚠️ 31 MB — đo nhầm `uv` wrapper thay vì con python, không đại diện |
 | python vllm | ❌ — không có native Windows                       | —                                                       | —               | —             | —                                                                  |
 
@@ -176,14 +183,14 @@ riêng.** ACE extract chỉ dùng được khi không có phương án nào khá
 
 ## Kill criteria — đánh dấu sau khi đo
 
-| Điều kiện                               | Kích hoạt?                                                                                                                                     | Hệ quả bắt buộc                                                           |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Warm gen 120s > 30s trên GPU mục tiêu   | ✅ KÍCH HOẠT — py pt turbo 48.8–127.4s, cpp 259.5–259.6s; chỉ py-sft sát ngưỡng (28.4s)                                                        | Bỏ UX "như nhạc cụ" → render queue + notification                         |
-| Cold start > 60s                        | ❌ KHÔNG theo health (cpp 5.1s, py 39.4s); first-gen thật còn phụ thuộc lazy-load + model size                                                 | Vẫn nên warm-on-open, không bắt buộc                                      |
-| vLLM không native **và** pt chậm hơn 2× | ❌ KHÔNG — vLLM không native là đúng, nhưng pt NHANH HƠN cpp trên GPU 8GB chứ không chậm hơn                                                   | Python sống sót qua Phase 0, là ứng viên mặc định                         |
-| Vulkan build fail / sai output          | ⚠️ CHƯA ĐÁNH GIÁ ĐƯỢC — SDK không cài nổi trên máy đo (UAC từ chối 3 lần); đây là giới hạn môi trường, KHÔNG phải kết luận kỹ thuật về ace.cpp | Chạy lại trên máy có SDK rồi mới tuyên bố "NVIDIA only"                   |
-| Rust audio xrun ở buffer 512            | ❌ KHÔNG — 0 xrun/30 phút ở cả 256/512/1024                                                                                                    | Giữ buffer mặc định 512 (10.7 ms); cân nhắc 256 nếu muốn latency thấp hơn |
-| extract tệ hơn Demucs rõ rệt            | ✅ KÍCH HOẠT — gộp 2 phiên: Demucs 34 thắng, ACE 1, thua ở cả 4 nhóm stem                                                                      | Demucs làm provider tách stem riêng ở Phase 2                             |
+| Điều kiện                               | Kích hoạt?                                                                                                                                          | Hệ quả bắt buộc                                                                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Warm gen 120s > 30s trên GPU mục tiêu   | ✅ KÍCH HOẠT — py pt turbo 48.8–127.4s, cpp 259.5–259.6s; chỉ py-sft sát ngưỡng (28.4s)                                                             | Bỏ UX "như nhạc cụ" → render queue + notification                                                                               |
+| Cold start > 60s                        | ❌ KHÔNG theo health (cpp 5.1s, py 39.4s); first-gen thật còn phụ thuộc lazy-load + model size                                                      | Vẫn nên warm-on-open, không bắt buộc                                                                                            |
+| vLLM không native **và** pt chậm hơn 2× | ❌ KHÔNG — vLLM không native là đúng, nhưng pt NHANH HƠN cpp trên GPU 8GB chứ không chậm hơn                                                        | Python sống sót qua Phase 0, là ứng viên mặc định                                                                               |
+| Vulkan build fail / sai output          | ⚠️ MỞ — build PASS (369/369), gen 10s PASS (RIFF hợp lệ); gen ≥30s crash hard OOM tại VAE decode trên 8GB (VRAM budget, không phải bug driver/code) | Đo lại trên GPU ≥12GB hoặc desktop sạch tuyệt đối sau reboot; chưa được tuyên bố "NVIDIA only" cũng chưa được mở rộng multi-GPU |
+| Rust audio xrun ở buffer 512            | ❌ KHÔNG — 0 xrun/30 phút ở cả 256/512/1024                                                                                                         | Giữ buffer mặc định 512 (10.7 ms); cân nhắc 256 nếu muốn latency thấp hơn                                                       |
+| extract tệ hơn Demucs rõ rệt            | ✅ KÍCH HOẠT — gộp 2 phiên: Demucs 34 thắng, ACE 1, thua ở cả 4 nhóm stem                                                                           | Demucs làm provider tách stem riêng ở Phase 2                                                                                   |
 
 ## Kết luận Phase 0
 

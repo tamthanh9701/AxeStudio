@@ -1,0 +1,26 @@
+# S-01/S-03 Vulkan — run evidence (2026-08-24, máy đo RTX 3070 8GB)
+
+## Build
+- SDK 1.4.357.0 (winget, UAC được duyệt lần này) — xem s01-vulkan-build.txt
+- cmake Ninja GGML_VULKAN=ON Release: 369/369 target, exit 0, ~2m43s
+
+## Binary chạy + gen xác minh (turbo/10s, LM-0.6B)
+- /props 200: lm ok, synth ok
+- /lm 200 (10.4s) — audio_codes trả dạng JSON ARRAY (batch_size=1 → 1 phần tử)
+- /synth?wav=1 200 (65.6s) → RIFF, 8.8s audio — OUTPUT HỢP LỆ
+
+## Crash ở cell 30s (2 lần, deterministic)
+- DiT 8 steps chạy tốt: 12.1s
+- VAE tiled decode (6 tiles) → ggml_vulkan: Device memory allocation of size
+  880803840 failed (ErrorOutOfDeviceMemory) → ggml_gallocr reserve 1761607680
+  fail → GGML_ASSERT crash (exit 2147483647), KHÔNG graceful
+- Điều kiện: VRAM nền máy ~5.4GB (leak từ process crash trước + WDDM không
+  thu hồi) + server ~2.6GB → free cho VAE ~0 — cần ≥2.6GB
+- Lần 1 (nền 3.2GB): cùng crash tại cùng pha
+
+## Kết luận
+- Build PASS, output PASS ở gen ngắn; 30s+ crash OOM hard trên 8GB với
+  baseline thực tế → không đo được ma trận 12 ô trên máy này
+- Kill criterion "Vulkan build fail / sai output": build KHÔNG fail, output
+  ngắn ĐÚNG → criterion VẪN MỞ, khuyến nghị đo lại trên GPU ≥12GB hoặc
+  desktop sạch tuyệt đối sau reboot
