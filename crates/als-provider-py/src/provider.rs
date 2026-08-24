@@ -62,7 +62,7 @@ impl PyProvider {
             match res.status() {
                 TaskStatus::QueuedOrRunning => {
                     // Không biết tổng thời gian load — leo dần tới 95% theo
-                    // ước lượng WARM_ESTIMATE, giống cách render() làm.
+                    // mốc WARM_ESTIMATE (median S-05), giống render() làm.
                     let pct = ((started.elapsed().as_millis() as f64
                         / WARM_ESTIMATE.as_millis() as f64)
                         * 95.0)
@@ -265,30 +265,14 @@ impl RenderProvider for PyProvider {
         }
         cx.report(2, ProgressStage::Queued).await;
         let init = self.client.init_model(&model.0, slot.0).await?;
-        // Server CÓ trả task handle thì poll THẬT qua /query_result
-        // (1 lần/s — trong ngưỡng ≤4 lần/s của contract IPC).
+        // Xác nhận máy đo 2026-08-24: /v1/init ĐỒNG BỘ — HTTP response chỉ
+        // trả khi model load xong (7.1s model nóng), KHÔNG có task_id.
+        // → khi await dưới đây hoàn tất, "load xong" là SỰ THẬT: báo 100%
+        // ngay. (Nhánh task_id giữ cho server tương lai trả handle async.)
         match init.get("task_id").and_then(|v| v.as_str()) {
             Some(task_id) => self.poll_warm_task(task_id, cx).await,
             None => {
-                // Response /v1/init chưa được xác nhận trên server thật
-                // (S-05 chỉ chứng minh init trả tức thì + load chạy ngầm).
-                // Không có handle → ước lượng theo WARM_ESTIMATE và DỪNG Ở
-                // 95%: KHÔNG tự tuyên bố "load xong" khi không có xác nhận.
-                // Gen đầu tiên sau warm vẫn đúng — server xếp phần load còn
-                // dang dở vào trước request đó.
-                let started = Instant::now();
-                while started.elapsed() < WARM_ESTIMATE {
-                    if cx.cancel.is_cancelled() {
-                        return Err(ProviderError::Cancelled);
-                    }
-                    tokio::time::sleep(self.poll_interval).await;
-                    let pct = ((started.elapsed().as_millis() as f64
-                        / WARM_ESTIMATE.as_millis() as f64)
-                        * 93.0)
-                        .min(93.0) as u8;
-                    cx.report(pct.max(5), ProgressStage::Planning).await;
-                }
-                cx.report(95, ProgressStage::Planning).await;
+                cx.report(100, ProgressStage::Planning).await;
                 Ok(())
             }
         }
