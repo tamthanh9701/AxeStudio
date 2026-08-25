@@ -1,6 +1,6 @@
 # ADR-002 — Khả dụng first-gen trên GPU 8GB và semantics acceptance #14
 
-- **Trạng thái:** Proposed (chờ chốt phương hướng — xem "Phương án")
+- **Trạng thái:** Accepted (chốt 2026-08-25 — **phương án 1**: đóng #14 bằng evidence sẵn có, mở ticket theo dõi ổn định hoá/đo lại)
 - **Ngày:** 2026-08-25
 - **Quyết định bởi:** 5 vòng đo thật trên máy RTX 3070 8GB (issue #14, comments 5384992915 → 5409684029), không bởi ưa thích
 
@@ -40,6 +40,16 @@ ADR-001 chọn hai provider sau một trait. Phase 0 đo warm-benchmark trên m�
 | 1   | **Chốt semantics hiện tại + đóng #14 bằng evidence sẵn có** | Round 3 = bằng chứng end-to-end; cache-hit fix có test + bench. Việc còn lại chỉ thiếu số lặp lại trên phần cứng ổn định                         |
 | 2   | **Đo thêm cpp+LM-0.6B làm first-gen mặc định cho 8GB**      | Spike S-01/S-03: cpp HOÀN THÀNH render trên chính máy này (LM-0.6B; LM-4B Q8_0 mới sụp). Cold start cpp 5.1s vs py 39.4s. Cần 1 vòng đo xác nhận |
 | 3   | **Chờ GPU ≥12GB mới close #14**                             | Trung thực nhất về số, nhưng block Sprint 1 vì biến số nằm ở upstream acestep (VAE chunking/offload), ngoài tầm kiểm soát                        |
+
+## Quyết định
+
+Chọn **phương án 1**. Cơ sở: mục tiêu thật của #14 là chứng minh kiến trúc
+render queue + notification + cache hoạt động — đã đạt (round 3 end-to-end,
+cache-hit có test hồi quy qua reopen + bench). Con số latency trên phần cứng
+bị giới hạn là biến số upstream (acestep VAE), không phải lỗi app — block
+Sprint 1 vì nó là sai ưu tiên. Phương án 2 giữ mở như enhancement: nếu profiler
+sản phẩm yêu cầu first-gen nhanh trên 8GB, cpp+LM-0.6B là ứng viên tự nhiên
+(ADR-001 đã giữ cpp cho đúng trường hợp này).
 
 ## Hệ quả kèm theo (độc lập với phương án chọn)
 
