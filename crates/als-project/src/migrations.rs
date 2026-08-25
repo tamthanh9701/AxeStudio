@@ -4,9 +4,15 @@ use crate::error::{ProjectError, Result};
 use rusqlite::Connection;
 
 /// Version schema hiện hành. Tăng khi thêm migration; bằng số migration mới nhất.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
-pub(crate) const MIGRATIONS: &[(u32, &str)] = &[(1, include_str!("../migrations/001_init.sql"))];
+pub(crate) const MIGRATIONS: &[(u32, &str)] = &[
+    (1, include_str!("../migrations/001_init.sql")),
+    (
+        2,
+        include_str!("../migrations/002_take_render_hash_not_unique.sql"),
+    ),
+];
 
 pub(crate) fn current_version(conn: &Connection) -> Result<u32> {
     let exists: bool = conn.query_row(
