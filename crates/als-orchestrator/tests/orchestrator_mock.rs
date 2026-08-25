@@ -341,3 +341,78 @@ async fn engine_status_carries_capabilities_and_models() {
     assert!(st.models.iter().all(|m| !m.checksum.is_empty()));
     fx.handle.shutdown().await;
 }
+
+#[tokio::test]
+async fn cache_hit_across_reopen_creates_take_for_new_clip() {
+    // BUG #3 (issue #14): tái hiện đúng chuỗi app — render thật ở phiên 1,
+    // ĐÓNG project, mở lại ở phiên 2, submit clip MỚI cùng recipe → phải có
+    // take row cho clip mới (cùng asset) + event TakeReady cached=true.
+    let dir = tempfile::tempdir().unwrap();
+    let proj_path = dir.path().join("p.aiproj");
+
+    // --- Phiên 1: render thật ---
+    let project = Project::create(&proj_path, "p", "0.0.1").unwrap();
+    let assets_root = project.layout.assets_dir();
+    let db_path = project.layout.db_path();
+    {
+        let mut mock = MockProvider::new();
+        mock.render_delay = Duration::from_millis(20);
+        let handle = spawn(
+            project.db,
+            AssetStore::new(&assets_root).unwrap(),
+            vec![Arc::new(mock)],
+            ProviderId(ProviderId::MOCK.to_owned()),
+        )
+        .unwrap();
+        let mut rx = handle.subscribe();
+        handle
+            .submit_generate("clip-A".into(), recipe(7), priority::INTERACTIVE)
+            .await
+            .unwrap();
+        wait_event(&mut rx, |ev| matches!(ev, OrchEvent::TakeReady { .. })).await;
+        handle.shutdown().await;
+    }
+
+    // --- Phiên 2: mở lại (orchestrator + AssetStore + db mới, cùng file) ---
+    let project = Project::open(&proj_path).unwrap();
+    assert_eq!(project.layout.db_path(), db_path);
+    {
+        let mock = MockProvider::new(); // delay 0 — nếu MISS sẽ thấy qua timing? không cần: assert bên dưới quyết định
+        let handle = spawn(
+            project.db,
+            AssetStore::new(&assets_root).unwrap(),
+            vec![Arc::new(mock)],
+            ProviderId(ProviderId::MOCK.to_owned()),
+        )
+        .unwrap();
+        let mut rx = handle.subscribe();
+        handle
+            .submit_generate("clip-B".into(), recipe(7), priority::INTERACTIVE)
+            .await
+            .unwrap();
+        let ev = wait_event(&mut rx, |ev| {
+            matches!(ev, OrchEvent::TakeReady { cached: true, .. })
+        })
+        .await;
+        match ev {
+            OrchEvent::TakeReady {
+                clip_id, take_id, ..
+            } => {
+                assert_eq!(clip_id, "clip-B");
+                handle.shutdown().await;
+                // Mở db riêng sau khi orchestrator đã nhả — project.db đã
+                // move vào spawn ở trên.
+                let db = Db::open(&db_path).unwrap();
+                let takes = db.takes_for_clip("clip-B").unwrap();
+                assert_eq!(takes.len(), 1, "clip B phải có ĐÚNG 1 take từ cache");
+                assert_eq!(takes[0].id, take_id.to_string());
+                let takes_a = db.takes_for_clip("clip-A").unwrap();
+                assert_eq!(
+                    takes[0].asset_id, takes_a[0].asset_id,
+                    "hai take phải chia sẻ CÙNG asset — không copy audio"
+                );
+            }
+            other => panic!("event sai loại: {other:?}"),
+        }
+    }
+}

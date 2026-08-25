@@ -495,11 +495,28 @@ impl Orchestrator {
             &model.checksum,
         )?;
         if let Some(take) = self.db.take_by_render_hash(&rh.0)? {
+            // BUG #3 (issue #14): schema take.clip_id — take gốc thuộc clip
+            // cũ. Clip mới cần ROW RIÊNG trỏ CÙNG asset_id (audio không bị
+            // copy), nếu không takes_for_clip(clip mới) mãi rỗng và take
+            // không bao giờ hiện trong rack dù active_take đã set.
+            let new_take = TakeRow {
+                id: TakeId::new().to_string(),
+                clip_id: payload.clip_id.clone(),
+                recipe_json: take.recipe_json.clone(),
+                plan_hash: take.plan_hash.clone(),
+                render_hash: take.render_hash.clone(),
+                asset_id: take.asset_id.clone(),
+                lufs: take.lufs,
+                true_peak_db: take.true_peak_db,
+                starred: false,
+                created_at: now_unix(),
+            };
+            self.db.take_insert(&new_take)?;
             self.set_job_state(&job_id, JobState::Done, None);
             self.emit(OrchEvent::TakeReady {
                 job_id,
                 clip_id: payload.clip_id,
-                take_id: TakeId::from(take.id),
+                take_id: TakeId::from(new_take.id),
                 cached: true,
             });
             return Ok(Preparation::CacheHitDone);
