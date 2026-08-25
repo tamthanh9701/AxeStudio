@@ -42,7 +42,14 @@ impl PyProvider {
                 // khác biệt bản chất so với cpp — xem ADR-001.
             ],
             poll_interval: Duration::from_millis(1000),
-            job_timeout: Duration::from_secs(20 * 60),
+            // Trần trần cho MỘT job render/warm. Lần đo 2026-08-25 (issue
+            // #14): VAE decode rơi CPU-tiled khi free VRAM < 2.6GB — mất
+            // >20 phút cho 30s audio (và không ổn định: phiên trước cùng
+            // đường chỉ ~90s). 1200s cũ GIẾT task đang tính đúng; server
+            // lại không có endpoint huỷ → compute tiếp ngầm = lãng phí kép.
+            // 3600s là headroom cho đường chậm hợp lệ; timeout chỉ nên
+            // bắn khi task THẬT SỰ kẹt.
+            job_timeout: Duration::from_secs(60 * 60),
         }
     }
 
