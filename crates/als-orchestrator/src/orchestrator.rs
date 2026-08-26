@@ -318,9 +318,12 @@ impl Orchestrator {
                     backend: self.registry.active_id(),
                     ready: health.as_ref().map(|h| h.ready).unwrap_or(false),
                     warm_models: health
+                        .as_ref()
                         .map(|h| h.loaded_models.iter().map(|m| m.0.clone()).collect())
                         .unwrap_or_default(),
-                    vram_free_mb: None,
+                    // Preflight VRAM (#14/ADR-002 amendment): provider báo
+                    // được thì điền — UI cảnh báo khi free < ngưỡng an toàn.
+                    vram_free_mb: health.as_ref().and_then(|h| h.vram_free_mb),
                     queue_depth: depth,
                     // ALS-F05 (#10): panel Generate đọc hai danh sách này
                     // thay vì hardcode — đổi backend, poll kế tiếp phản ánh.

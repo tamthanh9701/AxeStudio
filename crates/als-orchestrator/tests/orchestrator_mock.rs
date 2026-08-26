@@ -339,6 +339,13 @@ async fn engine_status_carries_capabilities_and_models() {
     assert_eq!(st.models.len(), 3, "mock có đủ 3 tier");
     assert!(st.models.iter().any(|m| m.tier == ModelTier::Turbo));
     assert!(st.models.iter().all(|m| !m.checksum.is_empty()));
+    // Preflight VRAM (ADR-002 amendment): health của provider phải điền
+    // tới EngineStatus — mock trả u64::MAX/1MB.
+    assert_eq!(
+        st.vram_free_mb,
+        Some(u64::MAX / 1_048_576),
+        "orchestrator không được bỏ ngang vram_free_mb của provider"
+    );
     fx.handle.shutdown().await;
 }
 

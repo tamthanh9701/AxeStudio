@@ -5,6 +5,7 @@ import { useStudio } from "./state/store"
 import { GeneratePanel } from "./features/generate/GeneratePanel"
 import { TimelineView } from "./features/timeline/TimelineView"
 import { TakeRack } from "./features/takes/TakeRack"
+import { vramWarning } from "./features/engine/rules"
 
 export default function App() {
   const snapshot = useStudio((s) => s.snapshot)
@@ -255,6 +256,14 @@ export default function App() {
       </header>
 
       {notice && <div className="notice">{notice}</div>}
+      {(() => {
+        const w = vramWarning(engine)
+        return w ? (
+          <div className="notice" role="alert">
+            ⚠ {w.message}
+          </div>
+        ) : null
+      })()}
 
       <main className="main">
         <section className="center">
