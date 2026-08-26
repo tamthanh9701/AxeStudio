@@ -1,7 +1,7 @@
 //! CppProvider — map trait RenderProvider → ace-server endpoints.
 
 use crate::client::AceServerClient;
-use als_core::{JobId, ModelTier, ProviderId};
+use als_core::{GenerationRecipe, JobId, ModelTier, ProviderId};
 use als_provider::{
     AudioAnalysis, AudioBlob, AudioFormat, CancelOutcome, Capability, Health, JobCtx,
     ModelDescriptor, ModelId, PlanInput, PlanOutput, ProgressStage, ProviderError, RenderInput,
@@ -117,18 +117,7 @@ impl RenderProvider for CppProvider {
             return Err(ProviderError::Cancelled);
         }
         cx.report(5, ProgressStage::Planning).await;
-        let r = &input.recipe;
-        let payload = serde_json::json!({
-            // TODO(S-01): xác nhận field name của /lm theo tài liệu ace-server.
-            "caption": r.prompt,
-            "lyrics": r.lyrics,
-            "duration": r.duration_s,
-            "bpm": r.bpm,
-            "key_scale": r.key_scale,
-            "time_signature": r.time_signature,
-            "vocal_language": r.vocal_language,
-            "model": input.model.0,
-        });
+        let payload = lm_body(&input.recipe);
         let res = self.client.lm(&payload).await?;
         if cx.cancel.is_cancelled() {
             return Err(ProviderError::Cancelled);
@@ -150,14 +139,10 @@ impl RenderProvider for CppProvider {
         }
         cx.report(0, ProgressStage::Rendering).await;
         let r = &input.recipe;
-        let seed = r.sampling.seed.unwrap_or(0);
-        let payload = serde_json::json!({
-            // TODO(S-01): xác nhận field name của /synth theo tài liệu ace-server.
-            "audio_codes": input.plan.audio_codes,
-            "seed": seed,
-            "steps": r.sampling.inference_steps,
-            "model": input.model.0,
-        });
+        let seed = r.sampling.seed.unwrap_or_else(random_seed);
+        let mut payload = lm_body(r);
+        payload["seed"] = serde_json::json!(seed);
+        payload["audio_codes"] = serde_json::json!(input.plan.audio_codes);
 
         // Huỷ giữa chừng = bỏ chờ response (server vẫn tính tiếp — xem cancel()).
         let bytes = tokio::select! {
@@ -247,5 +232,100 @@ mod tests {
             .contains(&Capability::for_task(TaskType::Extract)));
         assert!(p.capabilities().contains(&Capability::Text2Music));
         assert!(p.capabilities().contains(&Capability::SplitPlanRender));
+    }
+}
+
+/// Body chuẩn cho `/lm` — contract thật của ace-server (`src/request.cpp`,
+/// xác nhận S-01, khớp Bench-Matrix.ps1): ĐÚNG 6 field này. Field lạ
+/// (model/task_type/bpm/…) làm parser server bỏ payload → lỗi
+/// "caption is empty" dù caption có mặt (BUG integration 2026-08-25).
+fn lm_body(r: &GenerationRecipe) -> serde_json::Value {
+    serde_json::json!({
+        "caption": r.prompt,
+        "lyrics": r.lyrics,
+        "duration": r.duration_s,
+        "inference_steps": r.sampling.inference_steps,
+        "batch_size": r.sampling.batch_size,
+        "seed": r.sampling.seed.unwrap_or_else(random_seed),
+    })
+}
+
+/// Seed ngẫu nhiên khi recipe để seed=None — không dùng crate rand
+/// (deps của cpp provider bị khoá theo AGENTS §2); nanos hệ thống là đủ
+/// cho mục đích "mỗi lần một biến thể".
+fn random_seed() -> u64 {
+    let d = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    d.as_nanos() as u64 % 2_147_483_647
+}
+
+#[cfg(test)]
+mod payload_tests {
+    use super::*;
+    use als_core::{GenerationRecipe, ModelTier, SamplingParams, TaskType};
+
+    fn recipe() -> GenerationRecipe {
+        GenerationRecipe {
+            prompt: "lofi chill".into(),
+            lyrics: "[Instrumental]".into(),
+            duration_s: 30,
+            bpm: Some(100),
+            key_scale: None,
+            time_signature: Some(4),
+            vocal_language: None,
+            task: TaskType::Text2Music,
+            model_tier: ModelTier::Sft,
+            reference_audio: None,
+            source_audio: None,
+            repaint_range_ms: None,
+            sampling: SamplingParams {
+                seed: Some(7),
+                inference_steps: 8,
+                ..Default::default()
+            },
+            provider_overrides: Default::default(),
+        }
+    }
+
+    #[test]
+    fn lm_body_matches_ace_server_contract_exactly() {
+        let body = lm_body(&recipe());
+        let obj = body.as_object().unwrap();
+        let mut keys: Vec<_> = obj.keys().map(String::as_str).collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                "batch_size",
+                "caption",
+                "duration",
+                "inference_steps",
+                "lyrics",
+                "seed"
+            ],
+            "payload /lm phải đúng 6 field của src/request.cpp"
+        );
+        assert_eq!(obj["caption"], "lofi chill");
+        assert_eq!(obj["duration"], 30);
+        assert_eq!(obj["seed"], 7);
+        assert_eq!(obj["inference_steps"], 8);
+    }
+
+    #[test]
+    fn synth_body_is_lm_body_plus_audio_codes() {
+        let mut body = lm_body(&recipe());
+        body["seed"] = serde_json::json!(99);
+        body["audio_codes"] = serde_json::json!("FSQ:1,2,3");
+        let obj = body.as_object().unwrap();
+        assert_eq!(obj["audio_codes"], "FSQ:1,2,3");
+        assert_eq!(obj["seed"], 99);
+        assert!(obj.get("model").is_none(), "KHÔNG được gửi field model");
+    }
+
+    #[test]
+    fn random_seed_in_positive_i32_range() {
+        let s = random_seed();
+        assert!(s < 2_147_483_647);
     }
 }
