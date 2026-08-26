@@ -34,9 +34,11 @@ impl CppProvider {
                 .map(|(id, tier)| ModelDescriptor {
                     id: ModelId((*id).to_owned()),
                     tier: *tier,
-                    // TODO(S-01): đọc checksum thật từ thư mục model — checksum
-                    // đi vào render_hash, dùng placeholder sẽ làm cache sai khi
-                    // user đổi file weights. Blocked bởi model store (WS-G).
+                    // Giới hạn đã ghi trong ADR-002 amendment 2026-08-26:
+                    // checksum placeholder NHẤT QUÁN trong phạm vi binary +
+                    // bộ GGUF hiện tại. Thay file weights giữ nguyên tên →
+                    // cache KHÔNG vô hiệu tự động. Bỏ placeholder khi model
+                    // store (WS-G) cung cấp đường dẫn weights để hash blake3.
                     checksum: format!("todo-spike-{id}"),
                     vram_estimate_mb: None,
                     warm: true,

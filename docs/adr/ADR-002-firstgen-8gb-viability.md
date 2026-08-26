@@ -64,4 +64,40 @@ sản phẩm yêu cầu first-gen nhanh trên 8GB, cpp+LM-0.6B là ứng viên t
 
 PR #24 (code=200) · #25 (warmup đồng bộ) · #27 (parse result + download
 nguyên văn) · #28 (cache-hit take per clip + migration v2) · #29 (timeout
-3600s) — tất cả Accepted, CI xanh, có test hồi quy.
+3600s) · #32 (payload /lm+/synth đúng contract) · #33 (parse mảng response)
+— tất cả Accepted, CI xanh, có test hồi quy.
+
+## Amendment 2026-08-26 — cpp-first cho 8GB (Accepted)
+
+Vòng đo cpp qua app AxeStudio end-to-end (issue #14, comments 2026-08-26):
+
+| Phép đo                                    | Kết quả                                       |
+| ------------------------------------------ | --------------------------------------------- |
+| SFT/30s render thật (script, LM-0.6B Q8_0) | **7.6 / 8.4 s** — PASS ngưỡng 15s             |
+| SFT/30s qua app ×3 (cache-hit, sau PR #28) | **0.0 / 0.0 / 0.0 s** — PASS                  |
+| turbo/30s render thật (script)             | 57.2 / 61.5 s                                 |
+| Capability-driven UI (#10) dưới cpp        | Task không hỗ trợ tự ẩn, 3 tier models — PASS |
+| Cache semantics (PR #28)                   | 2 clip × 1 take / 1 asset — đúng              |
+
+### Quyết định bổ sung
+
+**Máy < 12GB VRAM → khuyến nghị backend cpp CUDA + tier SFT** cho task thuộc
+tập cpp hỗ trợ (text2music, cover). Python giữ vai trò: task nâng cao
+(repaint/lego/extract/complete/training) trên máy VRAM đủ, và là provider duy
+nhất có hot-swap multi-model.
+
+### Giới hạn đã biết — ghi nhận rõ ràng
+
+1. **cpp single-model-per-process**: đổi tier SFT ↔ turbo = restart ace-server
+   với `--dit` tương ứng (hot-swap chỉ có trên py — nhưng py không viable
+   trên 8GB, xem trên).
+2. **Checksum placeholder**: `als-provider-cpp` dùng `todo-spike-<model>` làm
+   checksum vì app không quản lý thư mục weights của ace-server. Hệ quả:
+   render_hash nhất quán trong phạm vi binary + bộ GGUF hiện tại; **thay file
+   weights mà giữ tên → cache KHÔNG vô hiệu tự động**. Chấp nhận cho v1; bỏ
+   placeholder khi model store (WS-G) bàn giao đường dẫn weights cho provider.
+3. **DLL runtime** phải nằm cạnh exe: `cublas64_13.dll`, `cublasLt64_13.dll`,
+   `cudart_hybrid64.dll` (shim cudart64_13 — CUDA 13.3 không ship riêng).
+4. **Preflight VRAM**: `EngineStatus.vram_free_mb` giờ điền từ health của
+   provider (cpp đọc `/props`); UI cảnh báo khi free < 2.6GB qua
+   `vramWarning()` — KHÔNG đổi contract IPC.
