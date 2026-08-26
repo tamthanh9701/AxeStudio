@@ -122,8 +122,27 @@ impl RenderProvider for CppProvider {
         }
     }
 
+    /// Chỉ expose tier mà ace-server ĐANG nạp (đọc `cli.dit` từ /props).
+    ///
+    /// BUG silent-mismatch (issue #14, thí nghiệm T1): server single-model
+    /// — payload không có field model nên chọn tier khác tier nạp sẽ render
+    /// bằng model đang có IM LẶNG. Lọc ở đây → find_model fail với lỗi rõ
+    /// ("không có model tier X") thay vì output sai không ai hay.
+    ///
+    /// Server không khai báo `cli.dit` (shape lạ) → trả đủ danh sách: không
+    /// giả vờ ẩn thứ mình không biết chắc. Props lỗi (server chết) → cũng
+    /// trả đủ: prepare() sẽ fail sau đó với lỗi connection rõ ràng hơn.
     async fn models(&self) -> Result<Vec<ModelDescriptor>> {
-        Ok(self.models.clone())
+        match self.client.props().await {
+            Ok(props) => {
+                let dit = props
+                    .get("cli")
+                    .and_then(|c| c.get("dit"))
+                    .and_then(|x| x.as_str());
+                Ok(filter_models_for_dit(&self.models, dit))
+            }
+            Err(_) => Ok(self.models.clone()),
+        }
     }
 
     async fn plan(&self, input: PlanInput, cx: JobCtx) -> Result<PlanOutput> {
@@ -369,5 +388,86 @@ mod response_tests {
         let v: serde_json::Value = serde_json::from_str("[]").unwrap();
         let err = extract_audio_codes(&v).unwrap_err();
         assert!(err.to_string().contains("mảng rỗng"));
+    }
+}
+
+/// Map tên file DiT (từ `/props.cli.dit`) → tier. `None` khi không nhận diện
+/// được — caller giữ nguyên danh sách thay vì ẩn sai.
+fn tier_from_dit_filename(name: &str) -> Option<ModelTier> {
+    let lower = name.to_lowercase();
+    if lower.contains("sft") {
+        Some(ModelTier::Sft)
+    } else if lower.contains("turbo") {
+        Some(ModelTier::Turbo)
+    } else if lower.contains("base") {
+        Some(ModelTier::Base)
+    } else {
+        None
+    }
+}
+
+/// Lọc danh sách model theo tier server đang nạp. `dit = None` (không khai
+/// báo) → trả đủ: không ẩn thứ mình không chắc.
+fn filter_models_for_dit(all: &[ModelDescriptor], dit: Option<&str>) -> Vec<ModelDescriptor> {
+    match dit.and_then(tier_from_dit_filename) {
+        Some(tier) => all.iter().filter(|m| m.tier == tier).cloned().collect(),
+        None => all.to_vec(),
+    }
+}
+
+#[cfg(test)]
+mod dit_filter_tests {
+    use super::*;
+    use als_core::SamplingParams;
+
+    fn descriptor(id: &str, tier: ModelTier) -> ModelDescriptor {
+        ModelDescriptor {
+            id: ModelId::from(id),
+            tier,
+            checksum: "test".into(),
+            vram_estimate_mb: None,
+            warm: true,
+        }
+    }
+
+    fn all_models() -> Vec<ModelDescriptor> {
+        vec![
+            descriptor("acestep-v15-turbo-Q8_0.gguf", ModelTier::Turbo),
+            descriptor("acestep-v15-sft-Q8_0.gguf", ModelTier::Sft),
+            descriptor("acestep-v15-base-Q8_0.gguf", ModelTier::Base),
+        ]
+    }
+
+    #[test]
+    fn sft_dit_keeps_only_sft() {
+        // Shape thật từ /props máy đo (T3): đường dẫn tương đối + tên file.
+        let got = filter_models_for_dit(&all_models(), Some("models/acestep-v15-sft-Q8_0.gguf"));
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].tier, ModelTier::Sft);
+    }
+
+    #[test]
+    fn turbo_dit_keeps_only_turbo() {
+        let got = filter_models_for_dit(&all_models(), Some("models/acestep-v15-turbo-Q8_0.gguf"));
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].tier, ModelTier::Turbo);
+    }
+
+    #[test]
+    fn unknown_filename_returns_all_no_false_hiding() {
+        let got = filter_models_for_dit(&all_models(), Some("models/custom-finetune.gguf"));
+        assert_eq!(got.len(), 3, "không nhận diện được → không ẩn gì");
+    }
+
+    #[test]
+    fn missing_dit_returns_all() {
+        assert_eq!(filter_models_for_dit(&all_models(), None).len(), 3);
+    }
+
+    #[test]
+    fn sampling_defaults_exist_for_recipe_builder_parity() {
+        // Guard cho lm_body(): SamplingParams phải có Default để recipe test
+        // dựng nhanh mà không drift field.
+        let _s: SamplingParams = SamplingParams::default();
     }
 }
