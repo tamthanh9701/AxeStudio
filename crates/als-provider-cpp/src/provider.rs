@@ -65,11 +65,23 @@ impl CppProvider {
     }
 }
 
-/// Trích audio_codes từ response /lm. Chấp nhận vài tên field vì tài liệu
-/// ace-server chưa chốt — TODO(S-01): khoá lại một field duy nhất sau spike.
+/// Trích audio_codes từ response /lm.
+///
+/// Shape SERVER THẬT (capture máy đo 2026-08-26, issue #14): **MẢNG**
+/// `[{"audio_codes":"58919,53780,…"}]` — batch_size=1 vẫn trả mảng
+/// (PowerShell tự unwrap single-element nên script spike không dính; Rust
+/// serde thì có). Chấp nhận CẢ object lẫn array + vài tên field cũ.
 fn extract_audio_codes(v: &serde_json::Value) -> Result<String> {
+    // Mảng → lấy phần tử đầu (batch_size=1 trong v1).
+    let item = if v.is_array() {
+        v.as_array()
+            .and_then(|a| a.first())
+            .ok_or_else(|| ProviderError::InvalidResponse("/lm trả mảng rỗng".into()))?
+    } else {
+        v
+    };
     for key in ["audio_codes", "audio_code_string", "codes"] {
-        if let Some(s) = v.get(key).and_then(|x| x.as_str()) {
+        if let Some(s) = item.get(key).and_then(|x| x.as_str()) {
             if !s.is_empty() {
                 return Ok(s.to_owned());
             }
@@ -327,5 +339,33 @@ mod payload_tests {
     fn random_seed_in_positive_i32_range() {
         let s = random_seed();
         assert!(s < 2_147_483_647);
+    }
+}
+
+#[cfg(test)]
+mod response_tests {
+    use super::*;
+
+    #[test]
+    fn parses_real_server_array_shape() {
+        // Capture thật từ máy đo 2026-08-26 (issue #14) — batch_size=1
+        // vẫn trả MẢNG một phần tử.
+        let raw = r#"[{"audio_codes":"58919,53780,2070,12345"}]"#;
+        let v: serde_json::Value = serde_json::from_str(raw).unwrap();
+        let codes = extract_audio_codes(&v).unwrap();
+        assert_eq!(codes, "58919,53780,2070,12345");
+    }
+
+    #[test]
+    fn still_accepts_plain_object_shape() {
+        let v: serde_json::Value = serde_json::from_str(r#"{"audio_codes":"1,2"}"#).unwrap();
+        assert_eq!(extract_audio_codes(&v).unwrap(), "1,2");
+    }
+
+    #[test]
+    fn empty_array_is_clear_error_not_panic() {
+        let v: serde_json::Value = serde_json::from_str("[]").unwrap();
+        let err = extract_audio_codes(&v).unwrap_err();
+        assert!(err.to_string().contains("mảng rỗng"));
     }
 }
