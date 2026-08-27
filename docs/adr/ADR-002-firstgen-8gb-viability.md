@@ -101,3 +101,8 @@ nhất có hot-swap multi-model.
 4. **Preflight VRAM**: `EngineStatus.vram_free_mb` giờ điền từ health của
    provider (cpp đọc `/props`); UI cảnh báo khi free < 2.6GB qua
    `vramWarning()` — KHÔNG đổi contract IPC.
+
+## Amendment 2026-08-27 — Fix tier mismatch silent (PR #35)
+
+Fix tier mismatch silent (PR #35): models() đọc /props.cli.dit → chỉ expose
+tier đang nạp; filename lạ fallback giữ nguyên danh sách. Không đổi contract IPC.

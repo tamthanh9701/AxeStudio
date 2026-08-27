@@ -109,3 +109,13 @@ export function availableTiers(models: readonly ModelDescriptor[]): ModelTier[] 
   const tiers = models.map((m) => m.tier)
   return TIER_ORDER.filter((t) => tiers.includes(t))
 }
+/** Giữ recipe và dropdown cùng một tier khi provider lọc model theo /props. */
+export function synchronizedTier(
+  current: ModelTier,
+  available: readonly ModelTier[],
+  baseOnly = false,
+): ModelTier {
+  if (available.includes(current) && (!baseOnly || isBaseTier(current))) return current
+  if (baseOnly && available.includes("base")) return "base"
+  return available[0] ?? current
+}
