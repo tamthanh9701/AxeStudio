@@ -106,3 +106,11 @@ nhất có hot-swap multi-model.
 
 Fix tier mismatch silent (PR #35): models() đọc /props.cli.dit → chỉ expose
 tier đang nạp; filename lạ fallback giữ nguyên danh sách. Không đổi contract IPC.
+
+## Amendment 2026-08-27 — Recipe tier synchronization (PR #36)
+
+Windows verification found a regression after PR #35: the filtered dropdown
+showed SFT while the persisted recipe still contained `model_tier: turbo`.
+PR #36 synchronizes `recipe.model_tier` to the first available provider tier
+when `engine.models` changes, preserving the base-only task lock. No IPC
+contract change.
