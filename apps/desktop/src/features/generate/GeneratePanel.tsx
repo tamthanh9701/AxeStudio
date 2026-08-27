@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { GenerationRecipe, ModelTier, TaskType } from "@als/bindings"
 import { explainError, ipc } from "../../ipc/client"
 import { useStudio } from "../../state/store"
@@ -7,6 +7,7 @@ import {
   availableTiers,
   lyricsHint,
   recipeProblems,
+  synchronizedTier,
   visibleControls,
 } from "./rules"
 
@@ -95,6 +96,19 @@ export function GeneratePanel() {
   // ALS-F05 (#10): tính khả dụng đọc TỪ engine_status — CẤM hardcode.
   const availTasks = engine ? availableTasks(engine.capabilities) : []
   const availTiers = engine ? availableTiers(engine.models) : []
+
+  useEffect(() => {
+    if (availTiers.length === 0) return
+    setRecipe((current) => {
+      const nextTier = synchronizedTier(
+        current.model_tier,
+        availTiers,
+        visibleControls(current.model_tier, current.task).baseOnlyModelLock,
+      )
+      return nextTier === current.model_tier ? current : { ...current, model_tier: nextTier }
+    })
+  }, [availTiers])
+
   const vis = visibleControls(recipe.model_tier, recipe.task)
   const hint = lyricsHint(recipe.lyrics)
 

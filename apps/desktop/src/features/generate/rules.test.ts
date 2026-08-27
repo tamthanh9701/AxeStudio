@@ -5,6 +5,7 @@ import {
   isTurbo,
   lyricsHint,
   recipeProblems,
+  synchronizedTier,
   visibleControls,
 } from "./rules"
 import type { GenerationRecipe, ModelDescriptor } from "@als/bindings"
@@ -158,6 +159,13 @@ describe("availableTasks/availableTiers — capability-driven (issue #10)", () =
   it("model lạ (tier ngoài danh sách) bị bỏ qua", () => {
     const models = [{ tier: "xl_turbo" }] as unknown as ModelDescriptor[]
     expect(availableTiers(models)).toEqual(["xl_turbo"])
+  })
+})
+describe("recipe tier synchronization", () => {
+  it("đồng bộ tier với danh sách provider đã lọc", () => {
+    expect(synchronizedTier("turbo", ["sft"])).toBe("sft")
+    expect(synchronizedTier("sft", ["sft"])).toBe("sft")
+    expect(synchronizedTier("turbo", [])).toBe("turbo")
   })
 })
 
